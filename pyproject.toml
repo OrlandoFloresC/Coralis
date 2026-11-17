@@ -35,6 +35,6 @@ coralis = "omr_coral.gui.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-omr_coral = ["default_config.yaml", "output/*.j2", "gui/*.html"]
+omr_coral = ["default_config.yaml", "output/*.j2", "gui/*.html", "gui/*.png", "gui/*.ico"]
 [tool.pytest.ini_options]
 pythonpath = ["tests"]

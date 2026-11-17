@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/coralis-logo.png" alt="Coralis" width="240"></p>
+
 # Coralis
 
 *Partituras corales a MusicXML* (paquete de Python: `omr-coral`).

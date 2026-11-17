@@ -332,6 +332,10 @@ def main() -> int:
         sys.stdout = sys.stdout or fh
         sys.stderr = sys.stderr or fh
     _hide_child_consoles()
+    if os.name == "nt":  # the taskbar shows Coralis' icon, not Python's
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Coralis.App")
     api = Api()
     window = webview.create_window(
         "Coralis · Partituras corales a MusicXML", str(HERE / "index.html"), js_api=api,
@@ -347,7 +351,7 @@ def main() -> int:
     def bind(win):
         win.dom.document.events.drop += DOMEventHandler(on_drop, True, True)
 
-    webview.start(bind, window)
+    webview.start(bind, window, icon=str(HERE / "coralis.ico"))
     return 0
 
 
