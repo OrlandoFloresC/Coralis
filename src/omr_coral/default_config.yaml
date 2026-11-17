@@ -1,0 +1,88 @@
+# Configuración por defecto de omr-coral.
+# Copia este archivo como config.yaml en la carpeta del proyecto (o pásalo con --config)
+# y cambia solo lo que necesites: los valores que no pongas se toman de aquí.
+
+tools:
+  # Ruta al ejecutable de Audiveris. null = detectar o instalar automáticamente.
+  audiveris: null
+  audiveris_version: "5.11.0"
+  # Instalar automáticamente las herramientas que falten (Audiveris, homr).
+  auto_install: true
+  # MuseScore es opcional (renderizado alternativo). null = detectar.
+  musescore: null
+  # homr: ruta al ejecutable (null = instalar en su propio entorno) y versión.
+  homr: null
+  homr_version: "0.7.1"
+  # Tiempo máximo por página para cada motor, en segundos.
+  engine_timeout: 600
+  # Reconocimientos simultáneos. Cada Audiveris usa ~1-2 GB de RAM.
+  parallel_jobs: 2
+
+preprocess:
+  dpi: 300
+  # Versiones de cada página que leerán los motores (ver preprocess/variants.py):
+  # original, enderezada, limpia, binaria, contraste, escala.
+  # Las que saldrían idénticas a otra (página ya derecha, escala ya buena) se omiten.
+  variants: [original, enderezada, limpia, binaria, contraste, escala]
+  # Distancia entre líneas del pentagrama (px) a la que lleva la variante "escala".
+  target_interline: 22
+
+recognition:
+  engines: [audiveris, homr]
+  # Idioma(s) de la letra para el OCR de Audiveris (códigos Tesseract: spa, eng, lat, ita, deu...).
+  lyrics_languages: "spa+lat+eng"
+
+voices:
+  # Rangos por voz en notación científica (C4 = do central). Ajusta a tu coro.
+  # Las claves internas son siempre soprano/alto/tenor/bass (la tercera voz es la de
+  # tenor/barítono); el nombre y la clave de salida se eligen en `output`.
+  ranges:
+    soprano: [C4, A5]
+    alto:    [F3, D5]
+    tenor:   [A2, G4]   # tenor/barítono
+    bass:    [E2, D4]
+
+rules:
+  # Reglas activas: duracion, rango, coherencia, alteraciones, letra, unisono, melodia
+  enabled: [duracion, rango, coherencia, alteraciones, letra, unisono, melodia]
+  # Una nota fuera de rango por estos semitonos o más es "error"; por menos, "aviso".
+  range_error_semitones: 5
+  # Compases alrededor para decidir qué estrofas se cantan en un pasaje.
+  lyrics_window: 2
+  # Saltos mayores que esto (salvo la octava) se marcan como improbables. 9 = sexta mayor.
+  max_leap_semitones: 9
+
+voting:
+  # Peso del voto de cada motor (cada variante leída por ese motor vota con este peso).
+  weights:
+    audiveris: 1.0
+    homr: 1.0
+  # Si la versión elegida para un compás reúne menos de esta fracción de los votos,
+  # el compás se marca como dudoso.
+  min_agreement: 0.5
+
+synthesis:
+  # Análisis por síntesis: comparar las cabezas de nota de la versión elegida con la imagen.
+  enabled: true
+  # Un compás con menos coincidencia que esto se marca como dudoso, salvo que casi todas
+  # las lecturas coincidan (trust_agreement): el detector de cabezas no es perfecto.
+  min_similarity: 0.85
+  trust_agreement: 0.8
+  # Con esta coincidencia o más, la imagen confirma la versión elegida aunque las lecturas
+  # no se pusieran de acuerdo.
+  confirm: 0.95
+  # Mejora mínima de coincidencia para cambiar una voz por otra versión.
+  min_gain: 0.05
+  max_passes: 5
+
+output:
+  # Nombre y clave de cada parte en el MusicXML final.
+  # Claves: G = sol, F = fa, G8vb = sol octavada (típica de tenor).
+  parts:
+    soprano: {name: Soprano,  clef: G}
+    alto:    {name: Alto,     clef: G}
+    tenor:   {name: Barítono, clef: F}
+    bass:    {name: Bajo,     clef: F}
+  # true = escribir la música una vez por estrofa, cada una con su letra
+  # (anacrusa en compás completo con silencios y un compás de silencio entre estrofas).
+  verses_separate: true

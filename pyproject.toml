@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omr-coral"
+version = "0.1.0"
+description = "Optical music recognition pipeline with auto-correction for SATB choral scores (PDF/photo -> MusicXML)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "AGPL-3.0-or-later"}
+dependencies = [
+  "music21>=9.1",
+  "verovio>=4.3",
+  "pypdfium2>=4.30",
+  "Pillow>=10",
+  "numpy>=1.26",
+  "opencv-python-headless>=4.9",
+  "PyYAML>=6",
+  "platformdirs>=4",
+  "Jinja2>=3.1",
+  "pywebview>=5.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+omr = "omr_coral.cli:main"
+
+[project.gui-scripts]
+coralis = "omr_coral.gui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+omr_coral = ["default_config.yaml", "output/*.j2", "gui/*.html"]
+[tool.pytest.ini_options]
+pythonpath = ["tests"]

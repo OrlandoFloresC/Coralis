@@ -1,0 +1,12 @@
+.venv/
+runs/
+__pycache__/
+*.egg-info/
+.DS_Store
+
+# partituras y resultados personales: nunca al repositorio público
+input/
+ground_truth/
+runs/
+*.mxl
+*.pdf
