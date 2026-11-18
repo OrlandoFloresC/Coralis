@@ -21,7 +21,8 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-TOOLS_DIR = Path(user_data_dir("omr-coral", appauthor=False)) / "tools"
+# CORALIS_TOOLS_DIR: another folder (to try the first run as a new user would see it)
+TOOLS_DIR = Path(os.environ.get("CORALIS_TOOLS_DIR") or Path(user_data_dir("omr-coral", appauthor=False)) / "tools")
 
 
 @dataclass
@@ -36,12 +37,41 @@ class ToolStatus:
 # --------------------------------------------------------------------------- helpers
 
 
-def _download(url: str, dest: Path) -> None:
+# The installer app reports how far the first-run downloads are: progress(message, fraction)
+_progress = None
+
+
+def set_progress(fn) -> None:
+    """Send download progress to `fn(message, fraction or None)` (the window's setup screen)."""
+    global _progress
+    _progress = fn
+
+
+def _report(message: str, fraction: float | None = None) -> None:
+    if _progress:
+        _progress(message, fraction)
+
+
+def _ssl_context():
+    """HTTPS with certifi's certificates: inside the packaged app the system Python's
+    certificate paths do not exist on the user's computer."""
+    import ssl
+
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+def _download(url: str, dest: Path, label: str | None = None) -> None:
     print(f"  Descargando {url}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": "omr-coral-installer"})
-    with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as fh:
+    req = urllib.request.Request(url, headers={"User-Agent": "coralis-installer"})
+    label = label or dest.name
+    with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as resp, open(tmp, "wb") as fh:
         total = int(resp.headers.get("Content-Length") or 0)
         done = 0
         while chunk := resp.read(1 << 20):
@@ -49,8 +79,14 @@ def _download(url: str, dest: Path) -> None:
             done += len(chunk)
             if total:
                 print(f"\r  {done / total:6.1%} de {total / 1e6:.0f} MB", end="", flush=True)
+                _report(f"Descargando {label} ({done / 1e6:.0f} de {total / 1e6:.0f} MB)…", done / total)
     print()
     tmp.replace(dest)
+
+
+def frozen() -> bool:
+    """Running inside the packaged app (PyInstaller), not from a Python installation."""
+    return bool(getattr(sys, "frozen", False))
 
 
 def _is_executable(p: Path) -> bool:
@@ -114,7 +150,8 @@ def install_audiveris(cfg: dict) -> Path:
     print(f"Instalando Audiveris {version} en {install_dir}")
     pkg = TOOLS_DIR / "downloads" / asset
     if not pkg.exists():
-        _download(url, pkg)
+        _download(url, pkg, f"Audiveris {version}")
+    _report("Instalando Audiveris…", None)
     with tempfile.TemporaryDirectory() as tmp:
         install_dir.mkdir(parents=True, exist_ok=True)
         system = platform.system()
@@ -178,7 +215,8 @@ def ensure_ocr_languages(cfg: dict) -> list[str]:
             continue
         if not cfg["tools"].get("auto_install", True):
             raise RuntimeError(f"Falta el idioma OCR '{lang}' en {tessdata}")
-        _download(f"https://github.com/tesseract-ocr/tessdata/raw/main/{lang}.traineddata", dest)
+        _download(f"https://github.com/tesseract-ocr/tessdata/raw/main/{lang}.traineddata", dest,
+                  f"el idioma «{lang}» para leer la letra")
         fetched.append(lang)
     return fetched
 
@@ -216,18 +254,60 @@ def find_homr(cfg: dict) -> Path | None:
     return exe if _is_executable(exe) else None
 
 
+# Inside the packaged app there is no Python to make homr's environment with: a standalone
+# build (python-build-standalone, by Astral) is downloaded once into the tools folder.
+STANDALONE_PYTHON = "3.12.7"
+STANDALONE_RELEASE = "20241016"
+
+
+def _standalone_python() -> Path:
+    if os.name == "nt":
+        target = "x86_64-pc-windows-msvc"
+    elif platform.system() == "Darwin":
+        target = ("aarch64" if platform.machine().lower() in ("arm64", "aarch64") else "x86_64") + "-apple-darwin"
+    else:
+        target = "x86_64-unknown-linux-gnu"
+    home = TOOLS_DIR / f"python-{STANDALONE_PYTHON}"
+    exe = home / "python" / ("python.exe" if os.name == "nt" else "bin/python3")
+    if _is_executable(exe):
+        return exe
+    name = f"cpython-{STANDALONE_PYTHON}+{STANDALONE_RELEASE}-{target}-install_only.tar.gz"
+    url = f"https://github.com/astral-sh/python-build-standalone/releases/download/{STANDALONE_RELEASE}/{name}"
+    pkg = TOOLS_DIR / "downloads" / name
+    if not pkg.exists():
+        _download(url, pkg, "Python para homr")
+    import tarfile
+
+    if home.exists():
+        shutil.rmtree(home)
+    with tarfile.open(pkg) as tar:
+        tar.extractall(home, filter="data") if hasattr(tarfile, "data_filter") else tar.extractall(home)  # noqa: S202
+    if not _is_executable(exe):
+        raise RuntimeError(f"Se descargó Python pero no encuentro {exe}")
+    return exe
+
+
 def install_homr(cfg: dict) -> Path:
     import venv as venvmod
 
     version = cfg["tools"]["homr_version"]
     venv_dir = _homr_venv(cfg)
     print(f"Instalando homr {version} en {venv_dir} (licencia GNU AGPL-3.0)")
-    venvmod.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
+    if frozen():
+        base = _standalone_python()
+        _report("Instalando homr (lector de notas): unos minutos…", None)
+        if venv_dir.exists():
+            shutil.rmtree(venv_dir)
+        subprocess.run([str(base), "-m", "venv", str(venv_dir)], check=True)
+    else:
+        _report("Instalando homr (lector de notas): unos minutos…", None)
+        venvmod.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
     py = _venv_bin(venv_dir, "python")
     subprocess.run([str(py), "-m", "pip", "install", "-q", "--upgrade", "pip"], check=True)
     subprocess.run([str(py), "-m", "pip", "install", "-q", f"homr[cpu]=={version}"], check=True)
     exe = _venv_bin(venv_dir, "homr")
     print("  Descargando los modelos de homr (solo la primera vez)...")
+    _report("Descargando los modelos de homr…", None)
     subprocess.run([str(exe), "--init"], check=True, capture_output=True,
                    env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
     print(f"  homr instalado: {exe}")
@@ -363,3 +443,27 @@ def audiveris_version(exe: Path) -> str | None:
     if "Version" not in info:
         return None
     return f"v{info['Version']}, OCR: {info.get('OCR Engine', '?')}"
+
+
+# --------------------------------------------------------------------------- first run (the app)
+
+
+def missing_tools(cfg: dict) -> list[str]:
+    """What the first run still has to download: [] when everything is in place."""
+    out = []
+    if not find_audiveris(cfg):
+        out.append("Audiveris")
+    langs = [l for l in (cfg["recognition"].get("lyrics_languages") or "").split("+") if l]
+    if any(not (audiveris_tessdata_dir() / f"{l}.traineddata").exists() for l in langs):
+        out.append("idiomas de la letra")
+    if not find_homr(cfg):
+        out.append("homr")
+    return out
+
+
+def install_missing(cfg: dict) -> None:
+    """Install everything the app needs, reporting progress. Safe to run again after a failure:
+    finished downloads are kept."""
+    ensure_audiveris(cfg)
+    ensure_homr(cfg)
+    _report("Listo.", 1.0)

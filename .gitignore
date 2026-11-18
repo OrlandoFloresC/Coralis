@@ -13,6 +13,10 @@ ground_truth/
 *.musicxml
 *.pdf
 
+# PyInstaller output
+build/
+dist/
+
 # partituras y resultados personales: nunca al repositorio público
 input/
 ground_truth/

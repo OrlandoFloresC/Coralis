@@ -140,6 +140,16 @@
     </div>
   </header>
 
+  <!-- 0. first run: download the score readers -->
+  <section class="card hidden" id="setup">
+    <h2>Preparando Coralis</h2>
+    <p class="hint" id="setupIntro">La primera vez, Coralis descarga los lectores de partituras (Audiveris y homr,
+      unos 400 MB de descarga; puede tardar de 5 a 20 minutos según tu internet). Solo pasa una vez.</p>
+    <div class="bar" id="setupBar"><div></div></div>
+    <div id="setupMsg">Empezando…</div>
+    <div class="go hidden" id="setupRetryRow"><button class="btn primary" id="setupRetry">Intentar de nuevo</button></div>
+  </section>
+
   <div id="home">
   <!-- 1. input -->
   <section class="card" id="form">
@@ -551,7 +561,31 @@ async function onNotesDone(r) {
   $("ntStatus").textContent = "✓ Guardado. Los compases que decidiste ya no salen como dudosos.";
 }
 
+function onSetup(p) {
+  if (p.message) $("setupMsg").textContent = p.message;
+  const bar = $("setupBar");
+  if (typeof p.fraction === "number") {
+    bar.classList.remove("indet");
+    bar.firstElementChild.style.width = Math.round(p.fraction * 100) + "%";
+  } else {
+    bar.classList.add("indet");
+  }
+}
+function onSetupDone() { show("setup", false); show("home", true); }
+function onSetupError(e) {
+  $("setupMsg").textContent = "No se pudo terminar: " + e.message +
+    ". Revisa tu conexión a internet e inténtalo de nuevo (lo ya descargado no se vuelve a bajar).";
+  show("setupRetryRow", true);
+}
+async function runSetup() {
+  show("setupRetryRow", false);
+  await pywebview.api.start_setup();
+}
+
 window.addEventListener("pywebviewready", async () => {
+  $("setupRetry").addEventListener("click", runSetup);
+  const missing = await pywebview.api.setup_needed();
+  if (missing.length) { show("home", false); show("setup", true); runSetup(); }
   drop.addEventListener("click", async () => addFiles(await pywebview.api.pick_files()));
   drop.addEventListener("keydown", async (e) => { if (e.key === "Enter" || e.key === " ") addFiles(await pywebview.api.pick_files()); });
   $("pickLyrics").addEventListener("click", async () => { const l = await pywebview.api.pick_lyrics(); if (l) setLyrics(l); });

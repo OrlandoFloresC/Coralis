@@ -20,10 +20,12 @@ dependencies = [
   "platformdirs>=4",
   "Jinja2>=3.1",
   "pywebview>=5.3",
+  "certifi",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+app = ["pyinstaller==6.22.3"]  # to build Coralis.app / Coralis.exe (see packaging/)
 
 [project.scripts]
 omr = "omr_coral.cli:main"

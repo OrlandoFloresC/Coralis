@@ -83,6 +83,32 @@ class Api:
         return out
 
     # ------------------------------------------------------------------ called from JavaScript
+    def setup_needed(self) -> list[str]:
+        """Score readers still missing (first run of the app)."""
+        from ..tools import missing_tools
+
+        return missing_tools(self._cfg)
+
+    def start_setup(self) -> None:
+        if self._busy:
+            return
+        self._busy = True
+        threading.Thread(target=self._setup, daemon=True).start()
+
+    def _setup(self) -> None:
+        from .. import tools
+
+        tools.set_progress(lambda msg, frac: self._js("onSetup", {"message": msg, "fraction": frac}))
+        try:
+            tools.install_missing(self._cfg)
+            self._js("onSetupDone", {})
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            self._js("onSetupError", {"message": str(e) or e.__class__.__name__})
+        finally:
+            tools.set_progress(None)
+            self._busy = False
+
     def pick_files(self) -> list[dict]:
         types = ("Partituras (*.pdf;*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.bmp;*.webp)", "Todos los archivos (*.*)")
         res = self._window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=True, file_types=types)
@@ -325,7 +351,45 @@ def _friendly(msg: str) -> str:
     return msg
 
 
+def _selftest(score: str) -> int:
+    """`Coralis --selftest <score>`: install what is missing and convert one score without
+    the window (checks a freshly built app, here or on GitHub's machines)."""
+    from .. import tools
+    from ..pipeline import recognize, validate_run
+
+    cfg = load_config(None)
+    tools.set_progress(lambda msg, frac: print(f"  [instalación] {msg}", flush=True))
+    tools.install_missing(cfg)
+    out = Path(tempfile.mkdtemp(prefix="coralis-selftest-"))
+    run_dir = recognize(Path(score), cfg, out, None, progress=lambda m, f: print(" ", m, flush=True))
+    validate_run(run_dir, cfg)
+    final = (run_dir / "final.txt").read_text(encoding="utf-8").strip()
+    print(f"OK: {run_dir / final}")
+    return 0
+
+
+def _check() -> int:
+    """`Coralis --check`: the libraries load and a measure can be drawn (a quick test of a
+    freshly built app; nothing is downloaded)."""
+    from music21 import corpus  # noqa: F401  (imported by the pipeline)
+
+    from .. import pipeline  # noqa: F401  (numpy, OpenCV, music21, pypdfium2...)
+    from ..config import load_config as _load
+    from ..output.render import render_voice_svg  # noqa: F401
+    import verovio
+
+    tk = verovio.toolkit(False)
+    tk.setResourcePath(str(Path(verovio.__file__).parent / "data"))
+    _load(None)
+    print("OK: Coralis", verovio.__name__, "listo")
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) >= 2 and sys.argv[1] == "--check":
+        return _check()
+    if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":
+        return _selftest(sys.argv[2])
     log = work_dir() / f"{APP_NAME}.log"
     if sys.stdout is None or sys.stderr is None:  # windowed app: no console to print to
         fh = open(log, "a", encoding="utf-8", buffering=1)  # noqa: SIM115

@@ -5,11 +5,25 @@
 *Partituras corales a MusicXML* (paquete de Python: `omr-coral`).
 
 Reconocimiento óptico de música (OMR) con autocorrección para partituras corales SATB.
-Convierte un PDF o fotos en MusicXML, y en un MusicXML por voz.
+Convierte un PDF o fotos en un MusicXML con las 4 voces (soprano, alto, barítono y bajo) y la letra.
+
+## Descargar
+
+**Mac con chip de Apple (M1 o posterior):** descarga el `.dmg` de la última versión en
+[Releases](https://github.com/OrlandoFloresC/Coralis/releases), ábrelo y arrastra Coralis a Aplicaciones.
+
+- La primera vez, macOS dirá que no puede comprobar el desarrollador, porque la app no está firmada.
+  Ábrela así: **Ajustes del Sistema → Privacidad y seguridad**, y abajo pulsa **«Abrir igualmente»**.
+  Solo hace falta una vez.
+- Al abrirse por primera vez, Coralis descarga sus lectores de partituras (Audiveris y homr, unos 400 MB).
+  Puede tardar de 5 a 20 minutos; después ya no.
+- Los resultados se guardan en **Documentos/Coralis**.
+
+**Windows:** próximamente. Mientras tanto, se puede usar desde el código (abajo).
+
+## Instalación desde el código
 
 Funciona en Windows, macOS y Linux.
-
-## Instalación
 
 Requisito: Python 3.11 o superior ([python.org](https://www.python.org/downloads/)).
 
