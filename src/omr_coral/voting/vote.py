@@ -97,11 +97,13 @@ _VOWELS = set("aeiouyáéíóúüàèìòùâêîôûäëïö")
 
 def _title(cands: list[Candidate]) -> str | None:
     """Real title of the piece: engines that read it (Audiveris) beat file names (homr)."""
-    for c in cands:
-        t = (c.score.title or "").strip()
-        if t and not t.lower().endswith((".musicxml", ".xml", ".mxl", ".png", ".jpg", ".pdf")):
-            return t
-    return None
+    titles = [t for t in ((c.score.title or "").strip() for c in cands)
+              if t and not t.lower().endswith((".musicxml", ".xml", ".mxl", ".png", ".jpg", ".pdf"))]
+    if not titles:
+        return None
+    from collections import Counter
+
+    return Counter(titles).most_common(1)[0][0]  # the title most readings agree on
 
 
 def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], dict]:
@@ -148,8 +150,11 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
                 g["sources"].append(c.label)
             if not groups:
                 continue
-            # exact ties: the reference reading (best overall structure) decides
-            best = min(groups.values(), key=lambda g: (g["errors"] > 0, g["avisos"] > 0, -g["weight"],
+            # A rule error rules a version out; a warning (aviso) is only a suspicion, so it
+            # halves the votes instead: 9 readings with a warning still beat 1 without
+            # («Oh, Dios y Padre», contralto c.57). Exact ties: the reference reading decides.
+            best = min(groups.values(), key=lambda g: (g["errors"] > 0,
+                                                       -g["weight"] * (0.5 if g["avisos"] else 1.0),
                                                        ref.label not in g["sources"]))
             m.alternatives[v] = [{**g, "content": key, "chosen": g is best} for key, g in groups.items()]
             new_events = copy.deepcopy(best["events"])

@@ -18,7 +18,7 @@ from .engines import get_engine
 from .model.digital import to_two_staves
 from .model.export import to_music21
 from .model.layout import read_audiveris_layout
-from .model.lyrics_fix import merge_elisions
+from .model.lyrics_fix import fix_ocr_lyrics, merge_elisions
 from .model.lyrics_text import apply_lyrics_text, read_lyrics_file
 from .model.verses import expand_verses, merge_split_measures
 from .model.merge import merge_pages
@@ -127,6 +127,11 @@ def _reading_file(d: Path) -> Path | None:
     return None
 
 
+def _spanish_lyrics(cfg: dict) -> bool:
+    langs = (cfg.get("recognition", {}).get("lyrics_languages") or "spa").split("+")
+    return langs[0] == "spa"
+
+
 def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
     weights = cfg.get("voting", {}).get("weights", {})
     cands = []
@@ -139,6 +144,7 @@ def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
             layout = read_audiveris_layout(omr) if omr.exists() else None
             try:
                 cs = build_choral_score(xml, layout)
+                fix_ocr_lyrics(cs, spanish=_spanish_lyrics(cfg))
             except Exception as e:  # noqa: BLE001  (a broken reading must not stop the vote)
                 print(f"  Lectura {engine_dir.name}/{vdir.name} descartada: {e}")
                 continue

@@ -10,6 +10,7 @@ the note where the other verses have their syllable.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from .issues import Issue
@@ -82,3 +83,44 @@ def merge_elisions(score: ChoralScore) -> list[Issue]:
                                     f"como sinalefa («{merged}»).", m.index))
                 break
     return issues
+
+
+# --------------------------------------------------------------------------- OCR elision marks
+
+_V = "aeiouáéíóúü"
+_STRONG_PAIR = re.compile(r"([aeoáéíóú])([aeoáéíóú])", re.IGNORECASE)
+# The OCR reads the elision tie "‿" as a letter "v": "doven" = "do‿en", "devho" = "de‿ho".
+# A "v" between vowels inside ONE syllable cannot be Spanish ("a-ve", "nue-va": v starts a
+# syllable). "...ve" at the end is left alone: English "love", "give".
+_V_MARK = re.compile(rf"(?<![{_V}])([{_V}])v(h?[{_V}])", re.IGNORECASE)  # not after a diphthong: "nueva"
+
+
+def _v_to_mark(m: re.Match) -> str:
+    if m.group(2).lower() == "e" and m.end() == len(m.string):
+        return m.group(0)  # final "-ve": English "love", "give"
+    return f"{m.group(1)}{ELISION}{m.group(2)}"
+
+
+def fix_ocr_syllable(text: str, spanish: bool = True) -> str:
+    """Repair elision marks the OCR misread or lost inside one syllable."""
+    if ELISION in text or " " in text.strip():
+        return text
+    fixed = _V_MARK.sub(_v_to_mark, text)
+    if spanish and fixed == text:
+        # Two strong vowels never share a syllable in Spanish ("mo-a", "da-a"): a lost mark.
+        fixed = _STRONG_PAIR.sub(lambda m: f"{m.group(1)}{ELISION}{m.group(2)}", text, count=1)
+    return fixed
+
+
+def fix_ocr_lyrics(score: ChoralScore, spanish: bool = True) -> int:
+    """Apply fix_ocr_syllable to every syllable of a reading. Returns how many changed."""
+    changed = 0
+    for m in score.measures:
+        for evs in m.voices.values():
+            for e in evs:
+                for n, (text, syl) in list(e.lyrics.items()):
+                    new = fix_ocr_syllable(text, spanish)
+                    if new != text:
+                        e.lyrics[n] = (new, syl)
+                        changed += 1
+    return changed

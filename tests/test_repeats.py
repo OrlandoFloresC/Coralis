@@ -78,8 +78,9 @@ def test_two_dal_segno_each_with_its_own_segno_and_coda_and_repeats_inside_the_c
 
 
 def test_coda_sign_inside_the_passage_marks_where_to_leave():
+    # the inner ⊕ is printed at the end of measure 2: measure 2 is sung, then the coda
     order, _ = _order(_m(0, segno=True), _m(1), _m(2, coda=True), _m(3, jump="D.S. al Coda"), _m(4, coda=True))
-    assert order == [0, 1, 2, 3, 0, 1, 4]
+    assert order == [0, 1, 2, 3, 0, 1, 2, 4]
 
 
 def test_multirest_counts_as_several_measures():
@@ -91,7 +92,8 @@ def test_repeat_after_the_coda_goes_back_to_its_own_start_sign():
     # |: 0 1(segno) 2(to coda) 3 D.S. | 4 coda 5[1. :|] 6[2.]
     order, _ = _order(_m(0, repeat_start=True, segno=True), _m(1, to_coda=True), _m(2, jump="D.S. al Coda"),
                       _m(3, coda=True), _m(4, volta=1, repeat_end=True), _m(5, volta=2))
-    assert order == [0, 1, 2, 0, 1, 3, 4, 0, 1, 2, 3, 5]
+    # back from the coda's 1st ending: sing up to "To Coda" again, then the coda with its 2nd ending
+    assert order == [0, 1, 2, 0, 1, 3, 4, 0, 1, 3, 5]
 
 
 def test_missing_start_sign_after_an_ending_does_not_loop():
@@ -99,3 +101,12 @@ def test_missing_start_sign_after_an_ending_does_not_loop():
     order, _ = _order(_m(0, repeat_start=True), _m(1, volta=1, repeat_end=True), _m(2, volta=2),
                       _m(3), _m(4), _m(5, volta=1, repeat_end=True), _m(6, volta=2))
     assert order == [0, 1, 0, 2, 3, 4, 5, 3, 4, 6]
+
+
+def test_repeat_in_the_coda_back_to_the_segno_jumps_to_the_coda_again():
+    # «Es exaltado»: 0 | 1(segno) 2 3(⊕) 4 D.S. | 5(coda) 6[1. :|] 7[2.]  — the :| has no |:
+    order, _ = _order(_m(0, barline="double"), _m(1, segno=True), _m(2), _m(3, coda=True),
+                      _m(4, jump="D.S. al Coda"), _m(5, coda=True), _m(6, volta=1, repeat_end=True),
+                      _m(7, volta=2))
+    # the :| has no |: and no earlier repeat: it goes back to the start, then "To Coda" → coda, 2nd ending
+    assert order == [0, 1, 2, 3, 4, 1, 2, 3, 5, 6, 0, 1, 2, 3, 5, 7]

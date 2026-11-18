@@ -56,7 +56,9 @@ def performance_order(cs: ChoralScore) -> tuple[list[Step], list[tuple[int, str]
     taken: set[tuple[int, int]] = set()
     jumped = False               # inside the passage sung again after a D.S./D.C.
     leave_at = coda_at = None    # for "al Coda": where to leave and where the coda starts
+    rearmed = False              # the current "al Coda" jump was re-armed by a repeat
     fine_mode = False
+    last_coda: tuple | None = None  # (leave, coda) of the last "al Coda" jump taken
     guard = 0
     while i < n and guard < 8 * n + 16:
         guard += 1
@@ -73,8 +75,11 @@ def performance_order(cs: ChoralScore) -> tuple[list[Step], list[tuple[int, str]
         if jumped and fine_mode and m.fine:
             break
         if jumped and leave_at == i:
-            i, start, pass_no = coda_at, coda_at, 1
-            jumped, leave_at, coda_at = False, None, None
+            last_coda = (leave_at, coda_at)
+            # coming back here through a repeat of the coda: keep counting the passes, so
+            # the coda takes its 2nd ending
+            i, start, pass_no = coda_at, coda_at, (pass_no if rearmed else 1)
+            jumped, leave_at, coda_at, rearmed = False, None, None, False
             continue
         if m.repeat_end and not jumped and i not in repeated and (i, pass_no) not in taken:
             numbers = _ending_numbers(cs, i) if m.volta is not None else []
@@ -84,6 +89,11 @@ def performance_order(cs: ChoralScore) -> tuple[list[Step], list[tuple[int, str]
                     repeated.add(i)
                 pass_no += 1
                 i = start = _repeat_start_for(cs, i)
+                # A :| in the coda that goes back into the D.S. passage («Es exaltado»): that
+                # passage is sung again up to the "To Coda" sign, and then the coda again.
+                if last_coda and i <= last_coda[0] < n and not jumped:
+                    jumped, rearmed = True, True
+                    leave_at, coda_at = last_coda
                 continue
         if m.jump and i not in used_jumps:
             target = _jump_target(cs, i, m.jump, warnings)
@@ -138,14 +148,16 @@ def _jump_target(cs: ChoralScore, i: int, jump: str, warnings: list) -> int | No
 def _coda_points(cs: ChoralScore, target: int, jump_at: int) -> tuple[int | None, int | None]:
     """Where to leave ("To Coda" between the target and the jump) and where the coda starts
     (the first coda sign after the jump). Two coda signs and no "To Coda" text: the first,
-    inside the passage, marks where to leave (at the end of the measure before it)."""
+    inside the passage, marks where to leave. Engravers print that sign above the barline at
+    the END of the measure to finish first, so that measure is sung, then the jump
+    («Es exaltado»: ⊕ over the end of "rá" — "rá" is sung on the D.S. pass)."""
     ms = cs.measures
     coda = next((k for k in range(jump_at + 1, len(ms)) if ms[k].marks.coda), None)
     leave = next((k for k in range(target, jump_at + 1) if ms[k].marks.to_coda), None)
     if leave is None:
         inner = next((k for k in range(target + 1, jump_at + 1) if ms[k].marks.coda), None)
         if inner is not None:
-            leave = inner - 1
+            leave = inner
     return leave, coda
 
 

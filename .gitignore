@@ -4,6 +4,15 @@ __pycache__/
 *.egg-info/
 .DS_Store
 
+# Partituras: nunca al repositorio (tienen derechos). Solo el código del proyecto.
+input/
+ground_truth/
+*.mscz
+*.mscx
+*.mxl
+*.musicxml
+*.pdf
+
 # partituras y resultados personales: nunca al repositorio público
 input/
 ground_truth/

@@ -601,7 +601,7 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
 
     _detect_pickup_and_number(measures)
     md = score.metadata
-    title = (md.title or md.movementName) if md else None
+    title = _biggest_credit(score) or ((md.title or md.movementName) if md else None)
     return ChoralScore(Path(xml_path), measures, issues, title, raw_layout)
 
 
@@ -700,6 +700,20 @@ def _drop_stray_lyrics(systems: list[dict], issues: list[Issue]) -> None:
                     st.lyrics = {}
                 issues.append(Issue("estructura", "info",
                                     f"Sistema {si}: se descartó texto que no parece letra: «{' '.join(words)[:80]}»."))
+
+
+def _biggest_credit(score) -> str | None:
+    """The title is the biggest text on the first page. Engines sometimes call a publisher
+    line the title ("Maranatha Music — The Praise Series" over "Oh, Dios y Padre")."""
+    from music21 import text as m21text
+
+    boxes = [t for t in score.getElementsByClass(m21text.TextBox)
+             if (t.page or 1) == 1 and t.content and t.content.strip() and t.style.fontSize
+             and any(c.isalpha() for c in t.content)]
+    if not boxes:
+        return None
+    best = max(boxes, key=lambda t: float(t.style.fontSize))
+    return best.content.strip()
 
 
 def _renumber_verses(system: dict, si: int, issues: list[Issue]) -> None:
