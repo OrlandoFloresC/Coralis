@@ -236,10 +236,8 @@
         <label>Salto al final del compás
           <select data-f="jump"><option value="">ninguno</option></select></label>
         <label>Casilla
-          <select data-f="volta"><option value="">ninguna</option><option value="1">1.ª vez</option>
-            <option value="2">2.ª vez</option><option value="3">3.ª vez</option><option value="4">4.ª vez</option>
-            <option value="5">5.ª vez</option><option value="6">6.ª vez</option><option value="7">7.ª vez</option></select>
-          hasta la <input type="number" min="2" max="20" placeholder="—" data-f="volta_to" style="width:60px">.ª
+          <input type="number" min="1" max="50" placeholder="—" data-f="volta" style="width:60px">.ª vez
+          hasta la <input type="number" min="2" placeholder="—" data-f="volta_to" style="width:60px" max="50">.ª
           <span class="hint">(solo si dice p. ej. «1.-6.»: de la 1.ª a la 6.ª vez)</span></label>
         <label>Silencio de varios compases
           <input type="number" min="2" max="200" placeholder="—" data-f="multirest" style="width:80px"></label>

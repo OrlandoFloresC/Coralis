@@ -57,3 +57,13 @@ def test_a_chorus_printed_once_is_sung_with_every_stanza():
     words = [m.voices["soprano"][0].lyrics.get(1, ("-",))[0] for m in out.measures]
     chorus = [f"coro{i}" for i in range(3, 8)]
     assert words == ["a0", "a1", "a2"] + chorus + ["-"] + ["b0", "b1", "b2"] + chorus
+
+
+def test_an_ending_of_many_times_over_a_long_passage():
+    body = [_m(i) for i in range(1, 31)]
+    body[0].marks.repeat_start = True
+    last = _m(31, volta=1, volta_to=12, repeat_end=True)
+    cs = ChoralScore(Path("x"), [_m(0)] + body + [last, _m(32, volta=13)], [])
+    steps, _ = performance_order(cs)
+    assert [s.index for s in steps].count(31) == 12
+    assert [s.index for s in steps][-1] == 32

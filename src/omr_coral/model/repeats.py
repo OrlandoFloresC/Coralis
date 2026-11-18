@@ -65,7 +65,9 @@ def performance_order(cs: ChoralScore) -> tuple[list[Step], list[tuple[int, str]
     fine_mode = False
     last_coda: tuple | None = None  # (leave, coda) of the last "al Coda" jump taken
     guard = 0
-    while i < n and guard < 8 * n + 16:
+    # a safety stop against a loop, big enough for an ending "1.-12." over the whole piece
+    most = max([m.marks.volta_to or m.marks.volta or 1 for m in ms] + [2])
+    while i < n and guard < (most + 6) * (n + 2):
         guard += 1
         m = ms[i].marks
         if m.repeat_start and i != start:
