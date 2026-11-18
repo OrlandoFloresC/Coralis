@@ -104,6 +104,7 @@ class Marks:
     repeat_end: bool = False     # :|  at the right
     barline: str | None = None   # right barline when not a repeat: "double" | "final"
     volta: int | None = None     # the measure is inside the 1st/2nd... ending
+    volta_to: int | None = None  # last time through of an ending printed "1.-6.": 6 (else None)
     segno: bool = False          # segno sign at the start of the measure
     coda: bool = False           # coda sign: the coda section starts here
     to_coda: bool = False        # "To Coda": jump from the end of this measure (2nd time)
@@ -312,10 +313,10 @@ def _read_spanner_marks(score: stream.Score, parts: list, per_part: list[list[St
                 for n in getattr(el, "notes", ()):
                     where_note[id(n)] = (pi, j, off)
     for sp in score.recurse().getElementsByClass("RepeatBracket"):
-        try:
-            number = int(str(sp.number).split(",")[0].strip())
-        except (TypeError, ValueError):
+        numbers = [x for x in getattr(sp, "numberRange", []) if x]
+        if not numbers:
             continue
+        number, last = min(numbers), max(numbers)
         # the bracket lists only the measures where it starts and stops: fill the ones between
         spots = [where_measure[id(m)] for m in sp.getSpannedElements() if id(m) in where_measure]
         for pi in {p for p, _ in spots}:
@@ -323,6 +324,7 @@ def _read_spanner_marks(score: stream.Score, parts: list, per_part: list[list[St
             for j in range(min(js), max(js) + 1):
                 if j < len(per_part[pi]):
                     per_part[pi][j].marks.volta = number
+                    per_part[pi][j].marks.volta_to = last if last > number else None
     for sp in score.recurse().getElementsByClass("DynamicWedge"):
         kind = "crescendo" if type(sp).__name__ == "Crescendo" else "diminuendo"
         a, b = sp.getFirst(), sp.getLast()
@@ -485,10 +487,46 @@ def _stacks_aligned(a: LayoutSystem, b: LayoutSystem, page_width: float) -> bool
     return all(abs(x[1] - y[1]) <= tol for x, y in zip(a.stacks[:-1], b.stacks[:-1]))
 
 
+_ENDING_NUMBER = re.compile(r'(<ending\b[^>]*?\bnumber=")([^"]*)(")')
+
+
+def _ending_number(text: str) -> str:
+    """Audiveris writes what it read in an ending bracket: "1.-6." comes out as "1,,6", which
+    music21 cannot read (the whole reading was lost). Two numbers are a range ("1, 2" and
+    "1-6" alike); more are a list."""
+    numbers = sorted({int(x) for x in re.findall(r"\d+", text)})
+    if not numbers:
+        return text
+    if len(numbers) == 2:
+        return f"{numbers[0]}-{numbers[1]}"
+    return ", ".join(str(x) for x in numbers)
+
+
+def _parse(path: Path):
+    """converter.parse, after tidying the ending numbers the engines write."""
+    raw = None
+    try:
+        if path.suffix.lower() == ".mxl":
+            import zipfile
+
+            with zipfile.ZipFile(path) as z:
+                inner = next((n for n in z.namelist() if n.endswith(".xml") and not n.startswith("META-INF")), None)
+                raw = z.read(inner).decode("utf-8", "replace") if inner else None
+        elif path.suffix.lower() in (".xml", ".musicxml"):
+            raw = path.read_text(encoding="utf-8", errors="replace")
+    except (OSError, ValueError, KeyError):
+        raw = None
+    if raw is not None:
+        fixed = _ENDING_NUMBER.sub(lambda m: m.group(1) + _ending_number(m.group(2)) + m.group(3), raw)
+        if fixed != raw:
+            return converter.parseData(fixed, format="musicxml")
+    return converter.parse(str(path))
+
+
 def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None) -> ChoralScore:
     # music21 prints import warnings ("ties left open") to stderr; the rules report those properly.
     with contextlib.redirect_stderr(io.StringIO()):
-        score = converter.parse(str(xml_path))
+        score = _parse(Path(xml_path))
     if isinstance(score, stream.Opus):
         score = score.scores[0]
     parts = list(score.parts)
@@ -621,6 +659,7 @@ def _measure_marks(staves: list[Staff], assignment) -> Marks:
         out.fine |= mk.fine
         out.barline = out.barline or mk.barline
         out.volta = out.volta or mk.volta
+        out.volta_to = out.volta_to or mk.volta_to
         out.jump = out.jump or mk.jump
         out.dynamics += [(g, off, v) for _, off, v in mk.dynamics]
         out.wedges += [(g, off, w) for _, off, w in mk.wedges]

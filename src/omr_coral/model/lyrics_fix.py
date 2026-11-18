@@ -11,10 +11,11 @@ the note where the other verses have their syllable.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import Counter
 
 from .issues import Issue
-from .score import PARTNER, ChoralScore, lyric_voice
+from .score import VOICES, PARTNER, ChoralScore, lyric_voice
 
 ELISION = "‿"
 _VOWELS = set("aeiouáéíóúüAEIOUÁÉÍÓÚÜ")
@@ -101,8 +102,20 @@ def _v_to_mark(m: re.Match) -> str:
     return f"{m.group(1)}{ELISION}{m.group(2)}"
 
 
+_I_FOR_L = re.compile(r"(?<![^\W\d_])I(?=[aeoáéó])")  # "Ia historia": no Spanish word starts "Ia/Ie/Io"
+_BRACKET_FOR_J = re.compile(r"(?<![^\W\d_])\](?=[a-záéíóúñ])")  # "]eho-vá", "]e-sús"
+
+
+def fix_ocr_letters(text: str, spanish: bool = True) -> str:
+    """Letters the OCR confuses in this typeface: "I" for "l", "]" for "J"."""
+    text = unicodedata.normalize("NFKC", text)  # typeset ligatures: "ﬁ" -> "fi"
+    text = _BRACKET_FOR_J.sub("J", text)
+    return _I_FOR_L.sub("l", text) if spanish else text
+
+
 def fix_ocr_syllable(text: str, spanish: bool = True) -> str:
     """Repair elision marks the OCR misread or lost inside one syllable."""
+    text = fix_ocr_letters(text, spanish)
     if ELISION in text or " " in text.strip():
         return text
     fixed = _V_MARK.sub(_v_to_mark, text)
@@ -124,3 +137,42 @@ def fix_ocr_lyrics(score: ChoralScore, spanish: bool = True) -> int:
                         e.lyrics[n] = (new, syl)
                         changed += 1
     return changed
+
+
+_VOWELS = set("aeiouáéíóúü")
+
+
+def split_glued_syllables(score: ChoralScore) -> int:
+    """The OCR sometimes glues the syllables of several notes into one ("daslaspro" under
+    «das las pro») and leaves the next notes empty. When a syllable is several Spanish
+    syllables and as many following notes of that voice have no word on that line, spread
+    them. A split between two vowels is not made: that is a sinalefa sung on one note.
+    Returns how many glued syllables were spread."""
+    from .lyrics_text import syllabify
+
+    spread = 0
+    for v in VOICES:
+        evs = [e for m in score.measures for e in m.voices.get(v, []) if e.is_attack]
+        lines = {n for e in evs for n in e.lyrics}
+        for n in lines:
+            for k, e in enumerate(evs):
+                if n not in e.lyrics:
+                    continue
+                text, syl = e.lyrics[n]
+                core = text.strip()
+                if not core.isalpha() or ELISION in core:
+                    continue
+                parts = syllabify(core)
+                if len(parts) < 2 or any(a[-1].lower() in _VOWELS and b[0].lower() in _VOWELS
+                                         for a, b in zip(parts, parts[1:])):
+                    continue
+                nxt = evs[k + 1:k + len(parts)]
+                if len(nxt) < len(parts) - 1 or any(n in x.lyrics for x in nxt):
+                    continue
+                first = "begin" if syl in ("single", "begin") else "middle"
+                last = "end" if syl in ("single", "end") else "middle"
+                e.lyrics[n] = (parts[0], first)
+                for j, (x, part) in enumerate(zip(nxt, parts[1:]), start=1):
+                    x.lyrics[n] = (part, last if j == len(parts) - 1 else "middle")
+                spread += 1
+    return spread

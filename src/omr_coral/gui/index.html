@@ -237,7 +237,10 @@
           <select data-f="jump"><option value="">ninguno</option></select></label>
         <label>Casilla
           <select data-f="volta"><option value="">ninguna</option><option value="1">1.ª vez</option>
-            <option value="2">2.ª vez</option><option value="3">3.ª vez</option></select></label>
+            <option value="2">2.ª vez</option><option value="3">3.ª vez</option><option value="4">4.ª vez</option>
+            <option value="5">5.ª vez</option><option value="6">6.ª vez</option><option value="7">7.ª vez</option></select>
+          hasta la <input type="number" min="2" max="20" placeholder="—" data-f="volta_to" style="width:60px">.ª
+          <span class="hint">(solo si dice p. ej. «1.-6.»: de la 1.ª a la 6.ª vez)</span></label>
         <label>Silencio de varios compases
           <input type="number" min="2" max="200" placeholder="—" data-f="multirest" style="width:80px"></label>
       </div>
@@ -389,7 +392,7 @@ const drop = $("drop");
 ["dragleave", "drop"].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" || e.target === document.documentElement) drop.classList.remove("over"); }));
 
 // ---------------------------------------------------------------- review of signs
-const FIELDS = ["segno", "coda", "to_coda", "fine", "repeat_start", "repeat_end", "jump", "volta", "multirest"];
+const FIELDS = ["segno", "coda", "to_coda", "fine", "repeat_start", "repeat_end", "jump", "volta", "volta_to", "multirest"];
 let rv = null;            // {run_dir, measures, warnings, saved}
 let rvChanges = {};       // index -> {field: value} (the measure's full editable state)
 let rvEditing = null;     // index being edited
@@ -399,7 +402,7 @@ function signChips(mk) {
   if (mk.repeat_start) c.push("𝄆");
   if (mk.segno) c.push("𝄋 segno");
   if (mk.coda) c.push("⊕ coda");
-  if (mk.volta) c.push(mk.volta + ".ª vez");
+  if (mk.volta) c.push(mk.volta_to ? `${mk.volta}.ª a ${mk.volta_to}.ª vez` : mk.volta + ".ª vez");
   if (mk.multirest) c.push("silencio ×" + mk.multirest);
   if (mk.to_coda) c.push("→ a la Coda");
   if (mk.fine) c.push("Fine");

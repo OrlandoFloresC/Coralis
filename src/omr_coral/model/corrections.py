@@ -20,7 +20,8 @@ from .issues import Issue
 from .score import VOICES, ChoralScore, Event, Marks
 
 FILE = "correcciones.json"
-EDITABLE = ("segno", "coda", "to_coda", "fine", "jump", "repeat_start", "repeat_end", "volta", "multirest", "barline")
+EDITABLE = ("segno", "coda", "to_coda", "fine", "jump", "repeat_start", "repeat_end", "volta", "volta_to",
+            "multirest", "barline")
 JUMPS = ("D.S. al Coda", "D.S. al Fine", "D.S.", "D.C. al Coda", "D.C. al Fine", "D.C.")
 
 
@@ -41,12 +42,12 @@ def save(run_dir: Path, data: dict) -> None:
 
 
 def _clean(field: str, value):
-    if field in ("volta", "multirest"):
+    if field in ("volta", "volta_to", "multirest"):
         try:
             n = int(value)
         except (TypeError, ValueError):
             return None
-        return n if n >= (1 if field == "volta" else 2) else None
+        return n if n >= (2 if field == "multirest" else 1) else None
     if field == "jump":
         return value if value in JUMPS else None
     if field == "barline":
@@ -67,6 +68,8 @@ def apply(cs: ChoralScore, data: dict) -> list[Issue]:
         for field, value in fields_.items():
             if field in EDITABLE:
                 setattr(m.marks, field, _clean(field, value))
+        if m.marks.volta is None or (m.marks.volta_to or 0) <= m.marks.volta:
+            m.marks.volta_to = None  # "1.ª a 1.ª vez" is just the 1st
         if m.marks.repeat_end:
             m.marks.barline = None
         if m.marks.multirest:

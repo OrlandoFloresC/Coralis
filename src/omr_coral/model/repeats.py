@@ -32,7 +32,12 @@ def _ending_numbers(cs: ChoralScore, i: int) -> list[int]:
     b = i
     while b + 1 < len(ms) and ms[b + 1].marks.volta is not None:
         b += 1
-    return sorted({ms[k].marks.volta for k in range(a, b + 1)})
+    return sorted({x for k in range(a, b + 1) for x in _passes(ms[k].marks)})
+
+
+def _passes(mk) -> range:
+    """The times through that take this ending: 1, or 1 to 6 for an ending printed "1.-6."."""
+    return range(mk.volta, (mk.volta_to or mk.volta) + 1)
 
 
 def performance_order(cs: ChoralScore) -> tuple[list[Step], list[tuple[int, str]]]:
@@ -68,7 +73,7 @@ def performance_order(cs: ChoralScore) -> tuple[list[Step], list[tuple[int, str]
         if m.volta is not None:
             numbers = _ending_numbers(cs, i)
             wanted = numbers[-1] if jumped else pass_no
-            if m.volta != wanted:
+            if wanted not in _passes(m):
                 i += 1
                 continue
         steps.append(Step(i, pass_no))
@@ -169,6 +174,27 @@ def _with_multirests(cs: ChoralScore, steps: list[Step]) -> list[Step]:
     return out
 
 
+def _real_lines(cs: ChoralScore) -> set[int]:
+    """Lyric line numbers that are sung text. A stray mark the OCR read under one note
+    («A ^» in «Nuestro temor es de Dios») must not make a whole 2nd stanza."""
+    from collections import Counter
+
+    count: Counter = Counter()
+    for m in cs.measures:
+        seen = {}
+        for evs in m.voices.values():  # the same syllable on several voices counts once
+            for e in evs:
+                for n, (text, _) in e.lyrics.items():
+                    if any(c.isalpha() for c in text):
+                        seen[(n, e.offset)] = 1
+        for (n, _off) in seen:
+            count[n] += 1
+    if not count:
+        return set()
+    biggest = max(count.values())
+    return {n for n, k in count.items() if k >= max(2, 0.15 * biggest) or n == 1}
+
+
 def lyric_line(cs: ChoralScore, steps: list[Step]) -> dict:
     """How lyric lines map to (stanza, pass): a repeated passage may print the words of
     each pass on its own line ("1." and "2." under the same notes).
@@ -176,10 +202,11 @@ def lyric_line(cs: ChoralScore, steps: list[Step]) -> dict:
     Returns {"stanzas": n, "shift": k}: on pass p of stanza v the line is v + (p - 1) * k.
     """
     repeated = {s.index for s in steps if s.pass_no > 1}
+    real = _real_lines(cs)
 
     def lines(indices) -> int:
         return max((n for i in indices for evs in cs.measures[i].voices.values()
-                    for e in evs for n in e.lyrics), default=0)
+                    for e in evs for n in e.lyrics if n in real), default=0)
 
     once = lines(i for i in range(len(cs.measures)) if i not in repeated)
     twice = lines(repeated)

@@ -72,3 +72,22 @@ def test_slur_marks_melisma(tmp_path):
     cs = build_choral_score(path)
     sop = cs.measures[0].voices["soprano"]
     assert [e.takes_syllable for e in sop if not e.is_rest] == [True, False, True]
+
+
+def test_glued_ocr_syllables_are_spread_over_the_empty_notes():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.lyrics_fix import split_glued_syllables
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    m = Measure(index=0, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4))
+    m.voices = {v: [Event(Fr(i), Fr(1), "C4") for i in range(4)] for v in VOICES}
+    s = m.voices["soprano"]
+    s[0].lyrics = {1: ("to", "begin")}
+    s[1].lyrics = {1: ("daslaspro", "end")}
+    a = m.voices["alto"]
+    a[0].lyrics = {1: ("doen", "single")}   # a sinalefa without its mark: kept on one note
+    split_glued_syllables(ChoralScore(Path("x"), [m], []))
+    assert [e.lyrics.get(1, ("",))[0] for e in s] == ["to", "das", "las", "pro"]
+    assert [e.lyrics.get(1, ("",))[0] for e in a] == ["doen", "", "", ""]

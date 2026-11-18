@@ -18,7 +18,7 @@ from .engines import get_engine
 from .model.digital import to_two_staves
 from .model.export import to_music21
 from .model.layout import read_audiveris_layout
-from .model.lyrics_fix import fix_ocr_lyrics, merge_elisions
+from .model.lyrics_fix import fix_ocr_lyrics, merge_elisions, split_glued_syllables
 from .model.lyrics_text import apply_lyrics_text, read_lyrics_file
 from .model.verses import expand_verses, merge_split_measures
 from .model.merge import merge_pages
@@ -31,7 +31,7 @@ from .preprocess.pages import extract_pages
 from .preprocess.variants import make_variants
 from .rules import run_rules
 from .synthesis.refine import refine
-from .voting.vote import Candidate, vote
+from .voting.vote import Candidate, _fix_endings as fix_endings, vote
 
 RESULT_STEM = "resultado"
 LYRICS_FILE = "letra.txt"
@@ -145,6 +145,8 @@ def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
             try:
                 cs = build_choral_score(xml, layout)
                 fix_ocr_lyrics(cs, spanish=_spanish_lyrics(cfg))
+                if _spanish_lyrics(cfg):
+                    split_glued_syllables(cs)
             except Exception as e:  # noqa: BLE001  (a broken reading must not stop the vote)
                 print(f"  Lectura {engine_dir.name}/{vdir.name} descartada: {e}")
                 continue
@@ -234,6 +236,7 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     # the user's answers in the review (signs the engines missed): they win over the vote
     answers = corrections.load(run_dir)
     vote_issues += corrections.apply(voted, answers)
+    fix_endings(voted)  # an ending marked "1.-6." by hand: the rest of it, and the next one is the 7th
     # notes chosen by the user: no longer "readings disagree" / "does not match the image"
     decided = corrections.apply_voices(voted, answers)
     vote_issues = [i for i in vote_issues if not (i.measure in decided and i.rule in ("votacion", "sintesis"))]

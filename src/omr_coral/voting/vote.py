@@ -103,7 +103,9 @@ def _title(cands: list[Candidate]) -> str | None:
         return None
     from collections import Counter
 
-    return Counter(titles).most_common(1)[0][0]  # the title most readings agree on
+    from ..model.lyrics_fix import fix_ocr_letters
+
+    return fix_ocr_letters(Counter(titles).most_common(1)[0][0])  # the title most readings agree on
 
 
 def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], dict]:
@@ -225,16 +227,23 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
 
 def _fix_endings(voted: ChoralScore) -> None:
     """Inside one run of 1st/2nd-time endings the numbers only go up: a "1" after a "2"
-    is a misread of the 2nd ending (its bracket is often drawn open, without an end)."""
-    prev = None
+    is a misread of the 2nd ending (its bracket is often drawn open, without an end).
+    After an ending "1.-6." the next one is the 7th, whatever number the engine gave it."""
+    prev = None  # (first, last) time through of the ending of the previous measure
     for m in voted.measures:
-        v = m.marks.volta
-        if v is None or m.marks.repeat_start:
-            prev = v
+        mk = m.marks
+        if mk.volta is None or mk.repeat_start:
+            prev = (mk.volta, mk.volta_to or mk.volta) if mk.volta is not None else None
             continue
-        if prev is not None and v < prev:
-            m.marks.volta = v = prev
-        prev = v
+        if prev is not None:
+            first, last = prev
+            if mk.volta == first or mk.volta < first:      # the same ending goes on
+                mk.volta, mk.volta_to = first, (last if last > first else None)
+            elif mk.volta <= last:                          # the ending after a "1.-6."
+                width = (mk.volta_to or mk.volta) - mk.volta
+                mk.volta = last + 1
+                mk.volta_to = mk.volta + width if width else None
+        prev = (mk.volta, mk.volta_to or mk.volta)
 
 
 def _signature_tally(aligned: list[tuple], whole_book_engines: set) -> dict:
@@ -245,6 +254,8 @@ def _signature_tally(aligned: list[tuple], whole_book_engines: set) -> dict:
     book = [(c, j) for c, j in aligned if c.engine in whole_book_engines]
     for c, j in (book or aligned):
         out["time"][c.score.measures[j].time] += c.weight
+    # only homr saw this measure (Audiveris skipped it): its time signature is a guess
+    out["time_guess"] = not book and any(c.engine not in whole_book_engines for c, _ in aligned)
     for c, j in aligned:
         out["key_fifths"][c.score.measures[j].key_fifths] += c.weight
     return out
@@ -267,7 +278,10 @@ def _resolve_signatures(voted: ChoralScore, tallies: list[dict]) -> None:
             options = winners[k]
             if not options:
                 continue
-            if len(options) == 1:
+            prev = getattr(voted.measures[k - 1], attr) if k else None
+            if attr == "time" and tallies[k].get("time_guess") and prev is not None:
+                value = prev  # a measure only homr saw keeps the time signature around it
+            elif len(options) == 1:
                 value = options[0]
             else:
                 after = next((w[0] for w in winners[k + 1:] if len(w) == 1), None)
@@ -353,6 +367,16 @@ def _vote_marks(readings: list[tuple]) -> Marks:
             value, weight = max(tally.items(), key=lambda kv: kv[1])
             if keep(weight):
                 setattr(out, attr, value)
+    if out.volta is not None:
+        # "1.-6.": Audiveris numbers endings 1, 2... when it cannot read their text, so one
+        # reading that did read a range at this ending is believed
+        ranges: dict = defaultdict(float)
+        for c, j in readings:
+            mk = c.score.measures[j].marks
+            if mk.volta == out.volta and mk.volta_to:
+                ranges[mk.volta_to] += c.weight
+        if ranges:
+            out.volta_to = max(ranges.items(), key=lambda kv: kv[1])[0]
     for attr in ("dynamics", "wedges"):
         tally = defaultdict(float)
         for c, j in readings:

@@ -225,9 +225,10 @@ def _endings(part: stream.Part, written: list[stream.Measure], measures: list[Me
     """Consecutive measures with the same ending number form one 1st/2nd-time bracket."""
     run, number = [], None
     for meas, m in zip(written + [None], measures + [None]):
-        n = m.marks.volta if m is not None else None
+        n = (m.marks.volta, m.marks.volta_to) if m is not None and m.marks.volta is not None else None
         if run and n != number:
-            part.insert(0, spanner.RepeatBracket(run, number=number))
+            first, last = number
+            part.insert(0, spanner.RepeatBracket(run, number=f"{first}-{last}" if last else first))
             run = []
         if n is not None:
             run.append(meas)

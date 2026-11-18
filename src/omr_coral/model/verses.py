@@ -57,12 +57,50 @@ def _silent(template: Measure) -> Measure:
     return m
 
 
-def _keep_verse(m: Measure, verse: int) -> None:
+def _refrain(cs: ChoralScore) -> dict[int, Fraction]:
+    """Where the words are the same for every stanza (a chorus printed with one line under
+    stanzas printed with several): {measure index: offset from which line 1 is sung by all}.
+
+    A chorus is a run of at least 4 measures whose words are on line 1 only (measures with no
+    words do not break it). The measure just before it gives line 1 from its last syllable
+    of a stanza line on (the upbeat «Los» after «...quí?»).
+    """
+    def lines(m: Measure) -> set[int]:
+        return {n for evs in m.voices.values() for e in evs for n in e.lyrics}
+
+    out: dict[int, Fraction] = {}
+    if max((max(lines(m), default=0) for m in cs.measures), default=0) < 2:
+        return out
+    run: list[int] = []
+    for i, m in enumerate(cs.measures + [None]):
+        ls = lines(m) if m is not None else {2}
+        if ls <= {1}:
+            run.append(i)
+            continue
+        worded = [k for k in run if lines(cs.measures[k])]
+        if len(worded) >= 4:
+            for k in run:
+                out[k] = Fraction(0)
+            first = run[0]
+            if first > 0:
+                prev = cs.measures[first - 1]
+                multi = [e.end for evs in prev.voices.values() for e in evs if any(n >= 2 for n in e.lyrics)]
+                if multi:
+                    out[first - 1] = max(multi)
+        run = []
+    return out
+
+
+def _keep_verse(m: Measure, verse: int, refrain_from: Fraction | None = None) -> None:
     """Only `verse` survives, as line 1, copied to every voice at the onsets of the voice
-    that carries the words (the soprano; the men in a men-only passage)."""
+    that carries the words (the soprano; the men in a men-only passage). In a chorus
+    (from `refrain_from` on) every stanza sings line 1."""
     syllables: dict = {}
     for v in VOICES:
         syllables = {e.offset: e.lyrics[verse] for e in m.voices.get(v, []) if verse in e.lyrics}
+        if refrain_from is not None:
+            syllables.update({e.offset: e.lyrics[1] for e in m.voices.get(v, [])
+                              if 1 in e.lyrics and e.offset >= refrain_from})
         if syllables:
             break
     for v in VOICES:
@@ -74,6 +112,11 @@ def _keep_verse(m: Measure, verse: int) -> None:
 
 def _content_length(m: Measure) -> Fraction:
     return max((e.end for evs in m.voices.values() for e in evs if not e.filled), default=Fraction(0))
+
+
+def _sung_length(m: Measure) -> Fraction:
+    return max((e.end for evs in m.voices.values() for e in evs if not e.filled and not e.is_rest),
+               default=Fraction(0))
 
 
 def _cut(evs: list[Event], length: Fraction, shift: Fraction = Fraction(0)) -> list[Event]:
@@ -100,6 +143,7 @@ def _join_marks(a: Measure, b: Measure, shift: Fraction) -> None:
     ma.fine |= mb.fine
     ma.to_coda |= mb.to_coda
     ma.volta = ma.volta or mb.volta
+    ma.volta_to = ma.volta_to or mb.volta_to
     ma.dynamics = ma.dynamics + [(g, off + shift, v) for g, off, v in mb.dynamics]
     ma.wedges = ma.wedges + [(g, off + shift, w) for g, off, w in mb.wedges]
 
@@ -122,6 +166,9 @@ def merge_split_measures(cs: ChoralScore) -> ChoralScore:
         if (b is not None and not a.pickup and b.system != a.system and a.time == b.time
                 and not a.marks.repeat_end and not b.marks.repeat_start and a.marks.volta == b.marks.volta):
             la, lb = _content_length(a), _content_length(b)
+            if la + lb != a.bar_length:
+                # the engines may write the missing part as rests: count up to the last note
+                la, lb = _sung_length(a), _sung_length(b)
             if 0 < la < a.bar_length and 0 < lb < a.bar_length and la + lb == a.bar_length:
                 for v in VOICES:
                     a.voices[v] = _cut(a.voices.get(v, []), la) + _cut(b.voices.get(v, []), lb, la)
@@ -143,6 +190,7 @@ def expand_verses(cs: ChoralScore, n_verses: int | None = None) -> ChoralScore:
     steps, _ = performance_order(cs)
     lines = lyric_line(cs, steps)
     n = n_verses or max(1, lines["stanzas"])
+    refrain = _refrain(cs)
     out = copy.deepcopy(cs)
     measures: list[Measure] = []
     for verse in range(1, n + 1):
@@ -156,7 +204,7 @@ def expand_verses(cs: ChoralScore, n_verses: int | None = None) -> ChoralScore:
                 _pad_pickup(m)
         _complete_last(block[-1])
         for m, s in zip(block, steps):
-            _keep_verse(m, verse + (s.pass_no - 1) * lines["shift"])
+            _keep_verse(m, verse + (s.pass_no - 1) * lines["shift"], refrain.get(s.index))
         if measures:
             measures.append(_silent(block[0]))
         measures += block
