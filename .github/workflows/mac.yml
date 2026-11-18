@@ -16,7 +16,7 @@ jobs:
   dmg:
     # only in the public repository (Mac minutes are free there; the private copy would spend its quota)
     if: github.repository == 'OrlandoFloresC/Coralis'
-    runs-on: macos-14   # Apple chip (arm64)
+    runs-on: macos-latest   # always an Apple chip (arm64); macos-14 was retired
     steps:
       - uses: actions/checkout@v4
 
