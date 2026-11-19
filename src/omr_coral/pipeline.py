@@ -155,7 +155,34 @@ def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
                 image_dir = run_dir / "pages"
             cands.append(Candidate(engine_dir.name, vdir.name, cs, image_dir,
                                    float(weights.get(engine_dir.name, 1.0))))
+    _octave_treble_clef(cands, set(cfg.get("voting", {}).get("marks_engines", ["audiveris"])))
     return cands
+
+
+def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
+    """Men's quartets print the tenors in a treble clef with a small 8 below (an octave lower).
+    homr does not see the 8 and reads those notes an octave too high; Audiveris sees it. When
+    most Audiveris measures have that clef on the upper staff, homr's upper voices go down."""
+    seen = [m.staves[0].clef for c in cands if c.engine in clef_engines for m in c.score.measures if m.staves]
+    if not seen or seen.count("G8vb") < len(seen) / 2:
+        return
+    from music21 import pitch as m21pitch
+
+    for c in cands:
+        if c.engine in clef_engines:
+            continue
+        for m in c.score.measures:
+            if not m.staves or m.staves[0].clef != "G":
+                continue
+            m.staves[0].clef = "G8vb"
+            for v in ("soprano", "alto"):
+                for e in m.voices.get(v, []):
+                    if e.pitch:
+                        p = m21pitch.Pitch(e.pitch)
+                        p.octave -= 1
+                        e.pitch = p.nameWithOctave
+                        if e.midi is not None:
+                            e.midi -= 12
 
 
 # --------------------------------------------------------------------------- validation
