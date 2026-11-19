@@ -59,6 +59,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.DMG }}
+          append_body: true
           body: |
             **Mac con chip de Apple (M1 o posterior).** Descarga el `.dmg`, ábrelo y arrastra Coralis a Aplicaciones.
 

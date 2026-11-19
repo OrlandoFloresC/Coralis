@@ -386,6 +386,9 @@ def _check() -> int:
 
 
 def main() -> int:
+    # a windowed app opens a black console for every console program it runs (pip, homr,
+    # Audiveris), which the user could close mid-install: hide them in every mode
+    _hide_child_consoles()
     if len(sys.argv) >= 2 and sys.argv[1] == "--check":
         return _check()
     if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":
@@ -395,7 +398,6 @@ def main() -> int:
         fh = open(log, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
         sys.stdout = sys.stdout or fh
         sys.stderr = sys.stderr or fh
-    _hide_child_consoles()
     if os.name == "nt":  # the taskbar shows Coralis' icon, not Python's
         import ctypes
 

@@ -1,0 +1,70 @@
+# Builds Coralis for Windows (64-bit) and packs it in an installer, Coralis-<version>-Windows.exe.
+#  - every push to main: build + quick test; the installer is kept as a download of the run
+#  - a version tag (git tag v0.3.0 && git push origin v0.3.0): also published in Releases
+name: Windows (.exe)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    # only in the public repository (Actions minutes are free there)
+    if: github.repository == 'OrlandoFloresC/Coralis'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Coralis and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[dev,app]"
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Build Coralis.exe
+        run: pyinstaller --noconfirm --distpath dist --workpath build packaging/coralis.spec
+
+      - name: Check the app opens its libraries
+        run: dist\Coralis\Coralis.exe --check
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Pack the installer
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "$GITHUB_REF" in refs/tags/*) ;; *) VERSION="prueba-${GITHUB_SHA::7}";; esac
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "//DAppVersion=${VERSION}" packaging/coralis.iss
+          echo "EXE=dist/Coralis-${VERSION}-Windows.exe" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Coralis-Windows
+          path: ${{ env.EXE }}
+          retention-days: 14
+
+      - name: Publish in Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.EXE }}
+          append_body: true
+          body: |
+
+            **Windows 10 u 11 (64 bits).** Descarga `Coralis-…-Windows.exe` y ábrelo para instalar (no pide permisos de administrador).
+
+            Windows puede mostrar «Windows protegió su PC» porque la app no está firmada: pulsa **Más información → Ejecutar de todos modos**. Solo hace falta una vez.
+
+            Al abrirse por primera vez, Coralis descarga sus lectores de partituras (unos 400 MB). Después ya no.
