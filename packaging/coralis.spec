@@ -50,7 +50,7 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName": "Coralis",
             "CFBundleDisplayName": "Coralis",
-            "CFBundleShortVersionString": "0.1.0",
+            "CFBundleShortVersionString": "0.2.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
             "NSDocumentsFolderUsageDescription": "Coralis guarda las partituras convertidas en Documentos/Coralis.",

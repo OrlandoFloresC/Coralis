@@ -96,20 +96,22 @@ _STRONG_PAIR = re.compile(r"([aeoáéíóú])([aeoáéíóú])", re.IGNORECASE)
 _V_MARK = re.compile(rf"(?<![{_V}])([{_V}])v(h?[{_V}])", re.IGNORECASE)  # not after a diphthong: "nueva"
 
 
-def _v_to_mark(m: re.Match) -> str:
-    if m.group(2).lower() == "e" and m.end() == len(m.string):
-        return m.group(0)  # final "-ve": English "love", "give"
+def _v_to_mark(m: re.Match, spanish: bool = False) -> str:
+    if not spanish and m.group(2).lower() == "e" and m.end() == len(m.string):
+        return m.group(0)  # final "-ve": English "love", "give" (in Spanish one syllable is never "lave")
     return f"{m.group(1)}{ELISION}{m.group(2)}"
 
 
 _I_FOR_L = re.compile(r"(?<![^\W\d_])I(?=[aeoáéó])")  # "Ia historia": no Spanish word starts "Ia/Ie/Io"
+_ONE_FOR_L = re.compile(r"(?<=[a-záéíóúñ])1|1(?=[a-záéíóúñ])", re.IGNORECASE)  # "ta1" = "tal"
 _BRACKET_FOR_J = re.compile(r"(?<![^\W\d_])\](?=[a-záéíóúñ])")  # "]eho-vá", "]e-sús"
 
 
 def fix_ocr_letters(text: str, spanish: bool = True) -> str:
-    """Letters the OCR confuses in this typeface: "I" for "l", "]" for "J"."""
+    """Letters the OCR confuses: "I" for "l", "]" for "J", "1" for "l" inside a word."""
     text = unicodedata.normalize("NFKC", text)  # typeset ligatures: "ﬁ" -> "fi"
     text = _BRACKET_FOR_J.sub("J", text)
+    text = _ONE_FOR_L.sub("l", text)
     return _I_FOR_L.sub("l", text) if spanish else text
 
 
@@ -118,7 +120,7 @@ def fix_ocr_syllable(text: str, spanish: bool = True) -> str:
     text = fix_ocr_letters(text, spanish)
     if ELISION in text or " " in text.strip():
         return text
-    fixed = _V_MARK.sub(_v_to_mark, text)
+    fixed = _V_MARK.sub(lambda m: _v_to_mark(m, spanish), text)
     if spanish and fixed == text:
         # Two strong vowels never share a syllable in Spanish ("mo-a", "da-a"): a lost mark.
         fixed = _STRONG_PAIR.sub(lambda m: f"{m.group(1)}{ELISION}{m.group(2)}", text, count=1)

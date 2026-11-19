@@ -25,3 +25,21 @@ def test_extract_pages_from_image_folder(tmp_path: Path):
     pages = extract_pages(src, tmp_path / "pages")
     assert [p.name for p in pages] == ["page_001.png", "page_002.png"]
     assert Image.open(pages[0]).mode == "L"
+
+
+def test_one_rest_printed_for_both_voices_of_a_staff():
+    # «Bálsamo existe»: the lower staff ends a measure with one quarter rest for both voices;
+    # the voice without it must rest too, not be left with a hole (that looks like a lost voice)
+    from fractions import Fraction as Fr
+
+    from omr_coral.model.score import RawEvent, _voice_from
+
+    def raw(off, dur, pitch=None):
+        from music21 import pitch as p
+
+        return RawEvent(Fr(off), Fr(dur), [p.Pitch(pitch)] if pitch else [], [None] if pitch else [], layer="1")
+
+    upper = [raw(0, 1, "G#3"), raw(1, 2, "F#3"), raw(3, 1)]
+    lower = [raw(0, 1, "D3"), raw(1, 2, "D#3")]
+    bass = _voice_from(lower, [upper], "bottom", Fr(4))
+    assert [(e.pitch, e.offset, e.filled) for e in bass] == [("D3", 0, False), ("D#3", 1, False), (None, 3, False)]

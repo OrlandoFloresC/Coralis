@@ -160,21 +160,27 @@ def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
 
 
 def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
-    """Men's quartets print the tenors in a treble clef with a small 8 below (an octave lower).
-    homr does not see the 8 and reads those notes an octave too high; Audiveris sees it. When
-    most Audiveris measures have that clef on the upper staff, homr's upper voices go down."""
-    seen = [m.staves[0].clef for c in cands if c.engine in clef_engines for m in c.score.measures if m.staves]
-    if not seen or seen.count("G8vb") < len(seen) / 2:
+    """Men's quartets print the upper staff in a treble clef with a small 8 below (an octave
+    lower). homr never sees the 8 and Audiveris misses it on some systems; a piece does not
+    change that clef from one system to the next. When most of the upper staves Audiveris read
+    have it, every upper staff read as a plain treble clef goes down an octave."""
+    def upper_staff(m):
+        if len(m.staves) == 2 or (len(m.staves) == 1 and m.solo == "upper"):
+            return m.staves[0]
+        return None
+
+    seen = [st.clef for c in cands if c.engine in clef_engines for m in c.score.measures
+            if (st := upper_staff(m)) is not None and st.clef in ("G", "G8vb")]
+    if not seen or seen.count("G8vb") <= len(seen) / 2:
         return
     from music21 import pitch as m21pitch
 
     for c in cands:
-        if c.engine in clef_engines:
-            continue
         for m in c.score.measures:
-            if not m.staves or m.staves[0].clef != "G":
+            st = upper_staff(m)
+            if st is None or st.clef != "G":
                 continue
-            m.staves[0].clef = "G8vb"
+            st.clef = "G8vb"
             for v in ("soprano", "alto"):
                 for e in m.voices.get(v, []):
                     if e.pitch:

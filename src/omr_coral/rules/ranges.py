@@ -13,9 +13,15 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
     ranges = cfg["voices"]["ranges"]
     far = cfg.get("rules", {}).get("range_error_semitones", 5)
     issues = []
+    tenor = tuple(pitch.Pitch(x).midi for x in ranges["tenor"])
     for v in VOICES:
-        lo, hi = (pitch.Pitch(x).midi for x in ranges[v])
+        lo0, hi0 = (pitch.Pitch(x).midi for x in ranges[v])
         for m in score.measures:
+            lo, hi = lo0, hi0
+            # a men's quartet prints its upper voices in the octave treble clef: 1st tenor = the
+            # soprano an octave lower; 2nd tenor = a tenor (an alto an octave lower is too low)
+            if v in ("soprano", "alto") and _upper_octave_clef(m):
+                lo, hi = (lo0 - 12, hi0 - 12) if v == "soprano" else tenor
             for e in m.voices.get(v, []):
                 if e.midi is None or lo <= e.midi <= hi:
                     continue
@@ -24,9 +30,16 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
                 issues.append(Issue(
                     "rango", "error" if out >= far else "aviso",
                     f"{VOICE_ES[v].capitalize()}: {_es(e.pitch)} está {out} semitono(s) por {where} "
-                    f"de su rango ({ranges[v][0]}–{ranges[v][1]}).",
+                    f"de su rango ({_es(pitch.Pitch(lo).nameWithOctave)}–{_es(pitch.Pitch(hi).nameWithOctave)}).",
                     m.index, v))
     return issues
+
+
+def _upper_octave_clef(m) -> bool:
+    """The staff of the soprano and alto is in the treble clef with an 8 below."""
+    if not m.staves or m.staves[0].clef != "G8vb":
+        return False
+    return len(m.staves) == 2 or (len(m.staves) == 1 and m.solo == "upper")
 
 
 def _es(name: str) -> str:

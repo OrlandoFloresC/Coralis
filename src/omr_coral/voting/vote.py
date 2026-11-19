@@ -226,24 +226,69 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
 
 
 def _fix_endings(voted: ChoralScore) -> None:
-    """Inside one run of 1st/2nd-time endings the numbers only go up: a "1" after a "2"
-    is a misread of the 2nd ending (its bracket is often drawn open, without an end).
-    After an ending "1.-6." the next one is the 7th, whatever number the engine gave it."""
+    """Make the 1st/2nd-time endings consistent.
+
+    - An ending belongs to a repeat: a run of endings with no :| in it (nor right before it)
+      is a misreading (Audiveris put endings on measures 1-4 of «A Cristo coronad») and goes,
+      unless a :| comes a few measures later (a short bracket: the ending reaches the :|).
+    - Inside one run the numbers only go up: a "1" after a "2" is a misread of the 2nd ending
+      (its bracket is often drawn open, without an end).
+    - The ending right after a :| is the next one; after an ending "1.-6." it is the 7th,
+      whatever number the engine gave it.
+    """
+    ms = voted.measures
+    k = 0
+    while k < len(ms):
+        if ms[k].marks.volta is None:
+            k += 1
+            continue
+        end = k
+        while end + 1 < len(ms) and ms[end + 1].marks.volta is not None:
+            end += 1
+        if not any(ms[j].marks.repeat_end for j in range(max(0, k - 3), end + 1)):
+            # the bracket may be drawn short: the ending goes on to a :| a few measures later
+            close = next((j for j in range(end + 1, min(len(ms), end + 5))
+                          if ms[j].marks.repeat_end or ms[j].marks.volta is not None), None)
+            if close is not None and ms[close].marks.repeat_end and ms[close].marks.volta is None:
+                for j in range(end + 1, close + 1):
+                    ms[j].marks.volta, ms[j].marks.volta_to = ms[end].marks.volta, ms[end].marks.volta_to
+                end = close
+            else:
+                for j in range(k, end + 1):
+                    ms[j].marks.volta = ms[j].marks.volta_to = None
+        k = end + 1
+
     prev = None  # (first, last) time through of the ending of the previous measure
-    for m in voted.measures:
+    prev_closed = False  # the previous measure ends with :|
+    closed_last = None   # last time through of the latest ending that ended with :|
+    closed_at = -99      # ...and the measure of that :|
+    for k, m in enumerate(ms):
         mk = m.marks
+        if mk.repeat_start:
+            closed_last = None
         if mk.volta is None or mk.repeat_start:
             prev = (mk.volta, mk.volta_to or mk.volta) if mk.volta is not None else None
+            prev_closed = mk.repeat_end
             continue
-        if prev is not None:
+        width = (mk.volta_to or mk.volta) - mk.volta
+        if prev is None:
+            if closed_last is not None and k - closed_at <= 3 and mk.volta <= closed_last:  # the next ending
+                mk.volta = closed_last + 1
+                mk.volta_to = mk.volta + width if width else None
+        else:
             first, last = prev
-            if mk.volta == first or mk.volta < first:      # the same ending goes on
+            if prev_closed and mk.volta <= last:            # the ending after the :| is the next one
+                mk.volta = last + 1
+                mk.volta_to = mk.volta + width if width else None
+            elif mk.volta == first or mk.volta < first:      # the same ending goes on
                 mk.volta, mk.volta_to = first, (last if last > first else None)
             elif mk.volta <= last:                          # the ending after a "1.-6."
-                width = (mk.volta_to or mk.volta) - mk.volta
                 mk.volta = last + 1
                 mk.volta_to = mk.volta + width if width else None
         prev = (mk.volta, mk.volta_to or mk.volta)
+        prev_closed = mk.repeat_end
+        if mk.repeat_end:
+            closed_last, closed_at = mk.volta_to or mk.volta, k
 
 
 def _signature_tally(aligned: list[tuple], whole_book_engines: set) -> dict:

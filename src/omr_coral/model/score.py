@@ -394,19 +394,34 @@ def _mark_slurs(score: stream.Score, per_part: list[list["Staff"]]) -> None:
 
 
 def _voice_from(primary, fallbacks, which: str, length: Fraction) -> list[Event]:
-    """Notes of `primary`, gaps filled with notes of `fallbacks`, remaining gaps as rests."""
+    """Notes of `primary`, gaps filled with notes of `fallbacks`, remaining gaps as rests.
+
+    Order of precedence: this voice's notes, the other voice's notes (a shared note head),
+    this voice's printed rests (a voice entering late), the other voice's rests (one rest
+    printed for both voices of the staff, «Bálsamo existe»). Giving this voice's rests
+    precedence over the other voice's notes was tried: homr often gives a rest to the wrong
+    voice, and «Jamás podrá alguien separarnos» lost bass notes."""
     events: list[Event] = []
     spans: list[tuple[Fraction, Fraction]] = []
-    for layer in [primary, *fallbacks]:
+
+    def take(layer, notes: bool) -> None:
         for raw in layer:
-            if raw.pitches and not _overlaps(raw.offset, raw.offset + raw.duration, spans):
-                events.append(_pick(raw, which))
+            if notes and raw.pitches:
+                ev = _pick(raw, which)
+            elif not notes and not raw.pitches and not raw.hidden:
+                ev = Event(raw.offset, raw.duration)
+            else:
+                continue
+            if not _overlaps(raw.offset, raw.offset + raw.duration, spans):
+                events.append(ev)
                 spans.append((raw.offset, raw.offset + raw.duration))
-    # Visible rests of the primary layer are real rests (e.g. a voice entering late).
-    for raw in primary:
-        if not raw.pitches and not raw.hidden and not _overlaps(raw.offset, raw.offset + raw.duration, spans):
-            events.append(Event(raw.offset, raw.duration))
-            spans.append((raw.offset, raw.offset + raw.duration))
+
+    take(primary, True)
+    for layer in fallbacks:
+        take(layer, True)
+    take(primary, False)
+    for layer in fallbacks:
+        take(layer, False)
     events.sort(key=lambda e: e.offset)
     out, t = [], Fraction(0)
     end = max([length] + [e.end for e in events])
@@ -439,11 +454,16 @@ def _split_staff(staff: Staff, n: int, length: Fraction) -> list[list[Event]]:
     return voices
 
 
-def _assign(staves: list[Staff]) -> list[tuple[Staff, int, int]] | None:
-    """(staff, voices_in_staff, first_voice_index) for each staff, or None if not SATB-like."""
+def _assign(staves: list[Staff], upper_clefs: set | None = None) -> list[tuple[Staff, int, int]] | None:
+    """(staff, voices_in_staff, first_voice_index) for each staff, or None if not SATB-like.
+
+    upper_clefs: clefs of the upper staff in this piece's two-staff systems. A lone staff with
+    one of them is the upper staff (a men's quartet prints its upper staff in the octave treble
+    clef, which otherwise would mean tenors)."""
     n = len(staves)
     if n == 1:  # solo passage: the other staff is silent (or not printed at all)
-        return [(staves[0], 2, 0 if CLEF_RANK[staves[0].clef] == 0 else 2)]
+        upper = CLEF_RANK[staves[0].clef] == 0 or staves[0].clef in (upper_clefs or set())
+        return [(staves[0], 2, 0 if upper else 2)]
     if n == 4:
         return [(s, 1, i) for i, s in enumerate(staves)]
     if n == 2:
@@ -602,6 +622,8 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
 
     # 6. canonical measures
     measures: list[Measure] = []
+    lower_clefs = {s["rows"][1][0].clef for s in merged if len(s["rows"]) == 2 and s["rows"][1]}
+    upper_clefs = {s["rows"][0][0].clef for s in merged if len(s["rows"]) == 2 and s["rows"][0]} - lower_clefs
     for si, s in enumerate(merged, start=1):
         if s.get("repaired"):
             issues.append(Issue("estructura", "info",
@@ -619,7 +641,7 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
             if s["layout"]:
                 m.bbox = _bbox(s["layout"], j)
                 m.geometry = _geometry(s["layout"], j, staves)
-            assignment = _assign(staves)
+            assignment = _assign(staves, upper_clefs)
             if assignment is None:
                 if j == 0:
                     issues.append(Issue("estructura", "error",
@@ -637,6 +659,7 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
             m.marks = _measure_marks(staves, assignment)
             measures.append(m)
 
+    _time_from_content(measures, issues)
     _detect_pickup_and_number(measures)
     md = score.metadata
     title = _biggest_credit(score) or ((md.title or md.movementName) if md else None)
@@ -739,6 +762,34 @@ def _drop_stray_lyrics(systems: list[dict], issues: list[Issue]) -> None:
                     st.lyrics = {}
                 issues.append(Issue("estructura", "info",
                                     f"Sistema {si}: se descartó texto que no parece letra: «{' '.join(words)[:80]}»."))
+
+
+def _time_from_content(measures: list[Measure], issues: list[Issue]) -> None:
+    """A time signature the engine missed: «Campeón de amor» goes 4/4 → 2/4 → 4/4 several times;
+    Audiveris saw the 2/4 but not the way back and kept 2/4 for 30 measures, homr read 3/4.
+    When every voice that sings in a measure fills exactly the same length, longer than the
+    bar read, and that length is a bar of a time signature printed elsewhere in the piece,
+    the measure is in that time. One voice overflowing (a misread note) changes nothing."""
+    printed = {}
+    for m in measures:
+        printed.setdefault(m.bar_length, m.time)
+    for m in measures:
+        ends = [max(e.end for e in evs if not e.filled)
+                for evs in m.voices.values() if any(not e.is_rest for e in evs)]
+        if len(ends) < 2 or len(set(ends)) != 1:
+            continue
+        length = ends[0]
+        if length <= m.bar_length or length not in printed:
+            continue
+        issues.append(Issue("estructura", "info",
+                            f"Compás de {length} tiempos leído como {m.time[0]}/{m.time[1]}: "
+                            f"se toma {printed[length][0]}/{printed[length][1]}.", m.index))
+        m.time = printed[length]
+        m.bar_length = m.duration = length
+        for st in m.staves:
+            st.time = m.time
+        for v, evs in m.voices.items():  # a trailing filled gap past the new bar goes
+            m.voices[v] = [e for e in evs if e.offset < length]
 
 
 def _biggest_credit(score) -> str | None:

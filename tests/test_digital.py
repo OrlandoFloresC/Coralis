@@ -48,9 +48,21 @@ def test_two_staves_chords_unison_and_signs():
 
 def test_endings_only_go_up_inside_a_run():
     ms = [_m(i, {v: [_note(0, 3, "C4")] for v in VOICES}, volta=n) for i, n in enumerate([1, 2, 1, 2])]
+    ms[0].marks.repeat_end = True  # the 1st ending closes with :|
     cs = ChoralScore(Path("x"), ms, [])
     _fix_endings(cs)
     assert [m.marks.volta for m in cs.measures] == [1, 2, 2, 2]
+
+
+def test_endings_without_a_repeat_are_dropped_and_the_one_after_the_repeat_is_the_second():
+    ms = [_m(i, {v: [_note(0, 3, "C4")] for v in VOICES}) for i in range(8)]
+    ms[0].marks.volta = 1                        # misread: no :| anywhere near
+    ms[5].marks.volta = 1
+    ms[5].marks.repeat_end = True
+    ms[6].marks.volta = 1                        # right after the :|: it is the 2nd
+    cs = ChoralScore(Path("x"), ms, [])
+    _fix_endings(cs)
+    assert [m.marks.volta for m in cs.measures] == [None, None, None, None, None, 1, 2, None]
 
 
 def test_solo_words_read_as_plain_text_become_syllables():
@@ -61,3 +73,14 @@ def test_solo_words_read_as_plain_text_become_syllables():
     assert ("fi", "middle") in sy and ("san", "begin") in sy
     assert _is_sign_text("D. al Coda") and _is_sign_text("S. alCoda") and _is_sign_text("37 |2_")
     assert not _is_sign_text("Gran-de es Dios")
+
+
+def test_a_short_first_ending_bracket_reaches_its_repeat_sign():
+    # «A Cristo coronad»: the "1" bracket is drawn over one measure, the :| is two measures later
+    ms = [_m(i, {v: [_note(0, 3, "C4")] for v in VOICES}) for i in range(6)]
+    ms[1].marks.volta = 1
+    ms[3].marks.repeat_end = True
+    ms[4].marks.volta = 1
+    cs = ChoralScore(Path("x"), ms, [])
+    _fix_endings(cs)
+    assert [m.marks.volta for m in cs.measures] == [None, 1, 1, 1, 2, None]
