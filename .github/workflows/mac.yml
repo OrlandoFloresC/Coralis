@@ -61,6 +61,10 @@ jobs:
           files: ${{ env.DMG }}
           append_body: true
           body: |
+            **Importante:** Coralis puede equivocarse (notas, ritmos, letra, repeticiones o estrofas). El reporte
+            marca los compases dudosos. Compara siempre el resultado con la partitura impresa: la decisión final
+            la tienes tú.
+
             **Mac con chip de Apple (M1 o posterior).** Descarga el `.dmg`, ábrelo y arrastra Coralis a Aplicaciones.
 
             La primera vez que abras Coralis, macOS dirá que no puede comprobar el desarrollador (la app no está

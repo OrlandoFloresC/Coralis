@@ -92,6 +92,7 @@ class RawEvent:
     layer: str = ""          # voice id inside the measure ("" = no explicit voices)
     source_id: int = 0       # id() of the music21 element it came from
     slur_cont: bool = False  # under a slur, after its first note (melisma: no new syllable)
+    stem: str = ""           # printed stem direction ("up"/"down") when the reading gives it
 
 
 @dataclass
@@ -159,6 +160,7 @@ class Measure:
     synth: object | None = None  # SynthResult: comparison with the noteheads of the image
     marks: Marks = field(default_factory=Marks)
     solo: str | None = None  # "upper"/"lower": only that staff is printed in this system (a solo)
+    own_words: bool = False  # each voice carries its own words here (men answering with other text)
 
     @property
     def label(self) -> str:
@@ -225,7 +227,11 @@ def _read_staff_measure(m: stream.Measure, part_index: int, pos: int, state: dic
             notes.sort(key=lambda n: n.pitch.ps)
             # In a chord each note carries its own tie (soprano tied, alto not).
             ties = [(n.tie.type if n.tie else None) for n in notes]
-            layer.append(RawEvent(off, dur, [n.pitch for n in notes], ties, layer=layer_id, source_id=id(el)))
+            # MusicXML gives a chord's stem on each of its notes.
+            stem = next((d for d in [el.stemDirection] + [n.stemDirection for n in notes]
+                         if d in ("up", "down")), "")
+            layer.append(RawEvent(off, dur, [n.pitch for n in notes], ties, layer=layer_id, source_id=id(el),
+                                  stem=stem))
             for ly in el.lyrics:
                 if ly.text and ly.text.strip():
                     lyrics.setdefault(off, {})[ly.number or 1] = (ly.text.strip(), ly.syllabic or "single")
@@ -435,9 +441,48 @@ def _voice_from(primary, fallbacks, which: str, length: Fraction) -> list[Event]
     return out
 
 
+def _stem_of(layer: list[RawEvent]) -> str:
+    """The layer's stem direction when every note gives the same one, else ""."""
+    stems = [e.stem for e in layer if e.pitches]
+    return stems[0] if stems and stems[0] and all(x == stems[0] for x in stems) else ""
+
+
+def _crossing(upper: list[RawEvent], lower: list[RawEvent]) -> float:
+    """How far (semitones) `lower` rises above `upper` where both sound at once."""
+    worst = 0.0
+    for a in upper:
+        for b in lower:
+            if a.pitches and b.pitches and a.offset < b.offset + b.duration and b.offset < a.offset + a.duration:
+                worst = max(worst, b.pitches[-1].ps - a.pitches[-1].ps)
+    return worst
+
+
+def _order_layers(layers: list[list[RawEvent]]) -> list[list[RawEvent]]:
+    """Upper voice first. Two printed voices are told apart by their stems (up = upper voice),
+    not by pitch: the alto may sit above the soprano for a few notes («Castillo fuerte»: alto
+    holds c♭ while the soprano runs c♭ b♭ a♭ g♭). With no stems at all, the engine's voice
+    numbers (1 = upper). With partial stems (a muddled reading) or none of that, mean pitch.
+    Voices in a hymn cross by a little, never by more than a fifth: a wider crossing is a
+    misread note («Todas las promesas»: homr put the bass a♭2 an octave up), so mean pitch."""
+    by_pitch = sorted(layers, key=_mean_pitch, reverse=True)
+    if len(layers) != 2:
+        return by_pitch
+    order = None
+    if sorted(_stem_of(l) for l in layers) == ["down", "up"]:
+        order = sorted(layers, key=lambda l: _stem_of(l) != "up")
+    else:
+        ids = [l[0].layer for l in layers]
+        no_stems = not any(e.stem for l in layers for e in l)
+        if no_stems and all(i.isdigit() for i in ids) and ids[0] != ids[1]:
+            order = sorted(layers, key=lambda l: int(l[0].layer))
+    if order is None or _crossing(order[0], order[1]) > 7:
+        return by_pitch
+    return order
+
+
 def _split_staff(staff: Staff, n: int, length: Fraction) -> list[list[Event]]:
     """Split one staff into n (1 or 2) voices: upper takes top notes, lower bottom notes."""
-    note_layers = sorted((l for l in staff.layers if any(e.pitches for e in l)), key=_mean_pitch, reverse=True)
+    note_layers = _order_layers([l for l in staff.layers if any(e.pitches for e in l)])
     if not note_layers:
         # Only rests (e.g. a silent bar between verses): keep the visible ones.
         rests = max(staff.layers, key=lambda l: sum(e.duration for e in l if not e.hidden), default=[])
@@ -757,6 +802,9 @@ def _drop_stray_lyrics(systems: list[dict], issues: list[Issue]) -> None:
     for si, s in enumerate(systems, start=1):
         for r, row in enumerate(s["rows"]):
             if share[r] < 0.5 and has[si - 1][r]:
+                sylls = [syl for st in row for d in st.lyrics.values() for _, syl in d.values()]
+                if len(sylls) >= 6 and sum(syl != "single" for syl in sylls) >= 3:
+                    continue  # sung words split into syllables: a stanza for this staff's voices
                 words = [t for st in row for d in st.lyrics.values() for t, _ in d.values()]
                 for st in row:
                     st.lyrics = {}

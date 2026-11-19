@@ -63,6 +63,10 @@ jobs:
           append_body: true
           body: |
 
+            **Importante:** Coralis puede equivocarse (notas, ritmos, letra, repeticiones o estrofas). El reporte
+            marca los compases dudosos. Compara siempre el resultado con la partitura impresa: la decisión final
+            la tienes tú.
+
             **Windows 10 u 11 (64 bits).** Descarga `Coralis-…-Windows.exe` y ábrelo para instalar (no pide permisos de administrador).
 
             Windows puede mostrar «Windows protegió su PC» porque la app no está firmada: pulsa **Más información → Ejecutar de todos modos**. Solo hace falta una vez.

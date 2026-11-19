@@ -7,6 +7,12 @@
 Reconocimiento óptico de música (OMR) con autocorrección para partituras corales SATB.
 Convierte un PDF o fotos en un MusicXML con las 4 voces (soprano, alto, barítono y bajo) y la letra.
 
+> **Importante:** Coralis puede equivocarse. Lee la partitura con programas de reconocimiento
+> automático y aplica reglas para corregir lo que puede, pero no es perfecto: notas, ritmos, letra,
+> repeticiones o estrofas pueden salir mal, sobre todo en fotos, arreglos poco comunes o letra difícil
+> de leer. El reporte marca los compases dudosos para que los revises. **Compara siempre el resultado
+> con la partitura impresa: la decisión final la tienes tú.**
+
 ## Descargar
 
 **Mac con chip de Apple (M1 o posterior):** descarga el `.dmg` de la última versión en
@@ -19,7 +25,17 @@ Convierte un PDF o fotos en un MusicXML con las 4 voces (soprano, alto, baríton
   Puede tardar de 5 a 20 minutos; después ya no.
 - Los resultados se guardan en **Documentos/Coralis**.
 
-**Windows:** próximamente. Mientras tanto, se puede usar desde el código (abajo).
+**Windows 10 u 11 (64 bits):** descarga `Coralis-…-Windows.exe` de la última versión en
+[Releases](https://github.com/OrlandoFloresC/Coralis/releases) y ábrelo para instalar (no pide permisos
+de administrador).
+
+- Windows puede mostrar «Windows protegió su PC», porque la app no está firmada. Pulsa
+  **Más información → Ejecutar de todos modos**. Solo hace falta una vez.
+- Al abrirse por primera vez, Coralis descarga sus lectores de partituras (Audiveris y homr, unos 400 MB).
+  Puede tardar de 5 a 20 minutos; después ya no.
+- Los resultados se guardan en **Documentos\Coralis**. Al desinstalar, esa carpeta se conserva.
+
+Coralis avisa al abrirse cuando hay una versión nueva.
 
 ## Instalación desde el código
 

@@ -24,7 +24,7 @@ from .model.verses import expand_verses, merge_split_measures
 from .model.merge import merge_pages
 from .model import corrections
 from .model.issues import Issue
-from .model.repeats import performance_order
+from .model.repeats import drop_echo_lines, performance_order, split_part_lines
 from .model.score import build_choral_score
 from .output.report import write_report
 from .preprocess.pages import extract_pages
@@ -181,6 +181,8 @@ def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
             if st is None or st.clef != "G":
                 continue
             st.clef = "G8vb"
+            if m.geometry and m.geometry.get("clefs") and m.geometry["clefs"][0] == "G":
+                m.geometry["clefs"][0] = "G8vb"  # where analysis by synthesis expects the heads
             for v in ("soprano", "alto"):
                 for e in m.voices.get(v, []):
                     if e.pitch:
@@ -273,6 +275,14 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     # notes chosen by the user: no longer "readings disagree" / "does not match the image"
     decided = corrections.apply_voices(voted, answers)
     vote_issues = [i for i in vote_issues if not (i.measure in decided and i.rule in ("votacion", "sintesis"))]
+    if split_part_lines(voted):
+        vote_issues.append(Issue("estructura", "info",
+                                 "Las líneas de letra que empiezan a mitad de la pieza son de otras voces (los "
+                                 "hombres responden con su propia letra), no estrofas: van en esas voces."))
+    for n in drop_echo_lines(voted):
+        vote_issues.append(Issue("estructura", "info",
+                                 f"La línea de letra {n} repite la línea 1 (letra de otras voces en el coro): "
+                                 "no se cuenta como estrofa."))
     lyrics_file = run_dir / LYRICS_FILE
     if lyrics_file.exists():
         vote_issues += apply_lyrics_text(voted, read_lyrics_file(lyrics_file))

@@ -107,12 +107,21 @@ _ONE_FOR_L = re.compile(r"(?<=[a-záéíóúñ])1|1(?=[a-záéíóúñ])", re.IG
 _BRACKET_FOR_J = re.compile(r"(?<![^\W\d_])\](?=[a-záéíóúñ])")  # "]eho-vá", "]e-sús"
 
 
+# Spanish words have no apostrophe; a word does not start with "Il" + a, e, o (it is "ll").
+_APOSTROPHE = re.compile(r"(?<=[^\W\d_])['’`´](?=[^\W\d_])")
+_I_FOR_LL = re.compile(r"(^|[\s¿¡(\"“])Il(?=[aeoáéó])")
+
+
 def fix_ocr_letters(text: str, spanish: bool = True) -> str:
     """Letters the OCR confuses: "I" for "l", "]" for "J", "1" for "l" inside a word."""
     text = unicodedata.normalize("NFKC", text)  # typeset ligatures: "ﬁ" -> "fi"
     text = _BRACKET_FOR_J.sub("J", text)
     text = _ONE_FOR_L.sub("l", text)
-    return _I_FOR_L.sub("l", text) if spanish else text
+    if not spanish:
+        return text
+    text = _APOSTROPHE.sub("", text)        # «p’e»: a speck read as an apostrophe
+    text = _I_FOR_LL.sub(r"\1ll", text)     # «Ila», «Ilan»: "ll" read as "Il"
+    return _I_FOR_L.sub("l", text)
 
 
 def fix_ocr_syllable(text: str, spanish: bool = True) -> str:

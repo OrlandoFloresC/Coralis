@@ -15,7 +15,7 @@ import copy
 from fractions import Fraction
 
 from .repeats import lyric_line, performance_order
-from .score import VOICES, ChoralScore, Event, Measure
+from .score import PARTNER, VOICES, ChoralScore, Event, Measure, lyric_voice
 
 
 def _beat_rests(start: Fraction, length: Fraction, beat: Fraction) -> list[Event]:
@@ -84,24 +84,75 @@ def _refrain(cs: ChoralScore) -> dict[int, Fraction]:
             first = run[0]
             if first > 0:
                 prev = cs.measures[first - 1]
-                multi = [e.end for evs in prev.voices.values() for e in evs if any(n >= 2 for n in e.lyrics)]
+                # after the last note with several lines, one line only: the chorus upbeat,
+                # on line 1 («Los» after «...quí?») or on another («Muy can-» on line 2)
+                multi = [e.end for evs in prev.voices.values() for e in evs if len(e.lyrics) >= 2]
                 if multi:
                     out[first - 1] = max(multi)
         run = []
     return out
 
 
+def _one_text_on_two_lines(cs: ChoralScore) -> None:
+    """A chorus whose one text is printed on two lines to make room («¿Cómo podré estar
+    triste?»: «Feliz cantando alegre,» on line 1, «yo vivo siempre aquí;» lower, on line 2,
+    then line 1 again): in a run of at least 4 measures with words where no note carries
+    both lines, and both lines appear, line 2 is the same text and moves to line 1."""
+    def both(e: Event) -> bool:
+        return 1 in e.lyrics and 2 in e.lyrics
+
+    def lines(m: Measure) -> set[int]:
+        return {n for evs in m.voices.values() for e in evs for n in e.lyrics}
+
+    run: list[int] = []
+    for i, m in enumerate(cs.measures + [None]):
+        mixed = m is None or any(both(e) for evs in m.voices.values() for e in evs) or bool(lines(m) - {1, 2})
+        if not mixed:
+            run.append(i)
+            continue
+        worded = [k for k in run if lines(cs.measures[k])]
+        seen = set().union(*(lines(cs.measures[k]) for k in run)) if run else set()
+        if len(worded) >= 4 and seen == {1, 2}:
+            for k in run:
+                for evs in cs.measures[k].voices.values():
+                    for e in evs:
+                        if 2 in e.lyrics:
+                            e.lyrics = {1: e.lyrics[2]}
+        run = []
+
+
 def _keep_verse(m: Measure, verse: int, refrain_from: Fraction | None = None) -> None:
     """Only `verse` survives, as line 1, copied to every voice at the onsets of the voice
     that carries the words (the soprano; the men in a men-only passage). In a chorus
     (from `refrain_from` on) every stanza sings line 1."""
+    if m.own_words:  # each voice keeps its own words (the men answering the melody);
+        # a voice with none sings the words of the voice that carries them, at its onsets
+        lead = {e.offset: e.lyrics[verse] for e in m.voices.get(lyric_voice(m), []) if verse in e.lyrics}
+        for v in VOICES:
+            evs = m.voices.get(v, [])
+            own = any(verse in e.lyrics for e in evs)
+            for e in evs:
+                if own:
+                    e.lyrics = {1: e.lyrics[verse]} if verse in e.lyrics and e.is_attack else {}
+                else:
+                    e.lyrics = {1: lead[e.offset]} if e.is_attack and e.offset in lead else {}
+        return
+    def line_at(e: Event):
+        """The syllable this stanza sings on e. In the chorus: line 1, or the one line printed
+        there (the chorus upbeat «Muy can-» printed on line 2 only)."""
+        if refrain_from is not None and e.offset >= refrain_from and e.lyrics:
+            return e.lyrics.get(1) or e.lyrics[min(e.lyrics)]
+        return e.lyrics.get(verse)
+
     syllables: dict = {}
     for v in VOICES:
-        syllables = {e.offset: e.lyrics[verse] for e in m.voices.get(v, []) if verse in e.lyrics}
-        if refrain_from is not None:
-            syllables.update({e.offset: e.lyrics[1] for e in m.voices.get(v, [])
-                              if 1 in e.lyrics and e.offset >= refrain_from})
+        syllables = {e.offset: line_at(e) for e in m.voices.get(v, []) if line_at(e)}
         if syllables:
+            # its staff partner's syllables while it holds a note (the alto's echo)
+            for e in m.voices.get(PARTNER[v], []):
+                if (line_at(e) and e.offset not in syllables
+                        and any(x.pitch and x.offset < e.offset < x.end for x in m.voices.get(v, []))):
+                    syllables[e.offset] = line_at(e)
             break
     for v in VOICES:
         for e in m.voices.get(v, []):
@@ -190,6 +241,8 @@ def expand_verses(cs: ChoralScore, n_verses: int | None = None) -> ChoralScore:
     steps, _ = performance_order(cs)
     lines = lyric_line(cs, steps)
     n = n_verses or max(1, lines["stanzas"])
+    cs = copy.deepcopy(cs)
+    _one_text_on_two_lines(cs)
     refrain = _refrain(cs)
     out = copy.deepcopy(cs)
     measures: list[Measure] = []
@@ -205,6 +258,13 @@ def expand_verses(cs: ChoralScore, n_verses: int | None = None) -> ChoralScore:
         _complete_last(block[-1])
         for m, s in zip(block, steps):
             _keep_verse(m, verse + (s.pass_no - 1) * lines["shift"], refrain.get(s.index))
+        if lines["shift"]:
+            # the whole piece sung again with the next line of words: that is the next
+            # stanza, with its silent measure in between
+            again = [k for k in range(1, len(steps)) if steps[k].index == 0]
+            for k in reversed(again):
+                _complete_last(block[k - 1])
+                block.insert(k, _silent(block[0]))
         if measures:
             measures.append(_silent(block[0]))
         measures += block

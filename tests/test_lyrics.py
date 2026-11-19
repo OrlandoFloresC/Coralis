@@ -91,3 +91,13 @@ def test_glued_ocr_syllables_are_spread_over_the_empty_notes():
     split_glued_syllables(ChoralScore(Path("x"), [m], []))
     assert [e.lyrics.get(1, ("",))[0] for e in s] == ["to", "das", "las", "pro"]
     assert [e.lyrics.get(1, ("",))[0] for e in a] == ["doen", "", "", ""]
+
+
+def test_ocr_apostrophe_and_il_for_ll():
+    from omr_coral.model.lyrics_fix import fix_ocr_letters
+
+    assert fix_ocr_letters("p’e") == "pe"            # «Cuando suene la trompeta»
+    assert fix_ocr_letters("Ilan") == "llan"         # «Cuando la pena»: «llan-to»
+    assert fix_ocr_letters("(Ilamen") == "(llamen"
+    assert fix_ocr_letters("Iglesia") == "Iglesia"
+    assert fix_ocr_letters("Ilu") == "Ilu"           # «I-lu-mi-na»: a real "Il"

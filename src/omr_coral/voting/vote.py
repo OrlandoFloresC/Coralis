@@ -85,11 +85,27 @@ def _lyric_lines(c: Candidate, mi: int) -> dict[int, list[tuple]]:
     """verse -> [(offset, text, syllabic)] on the lyrics-carrying voice (soprano)."""
     out: dict[int, list[tuple]] = defaultdict(list)
     mm = c.score.measures[mi]
-    for e in mm.voices.get(lyric_voice(mm), []):
+    lead = lyric_voice(mm)
+    for e in mm.voices.get(lead, []):
         for n, (text, syl) in e.lyrics.items():
             if any(ch.lower() in _VOWELS for ch in text):  # "F", "-", "'" can never be a sung syllable
                 out[n].append((e.offset, text, syl))
+    # the staff partner's syllables while the lead voice holds a note («El camino es escabroso»:
+    # the soprano holds while the alto echoes «(muy can-sa-dos)»)
+    for e in mm.voices.get(PARTNER[lead], []):
+        if not e.is_attack or not holding(mm.voices.get(lead, []), e.offset):
+            continue
+        for n, (text, syl) in e.lyrics.items():
+            if any(ch.lower() in _VOWELS for ch in text) and all(o != e.offset for o, _, _ in out[n]):
+                out[n].append((e.offset, text, syl))
+    for n in out:
+        out[n].sort(key=lambda x: x[0])
     return out
+
+
+def holding(events: list[Event], offset) -> bool:
+    """The voice is sustaining a note (attacked earlier) at this offset."""
+    return any(e.pitch and e.offset < offset < e.end for e in events)
 
 
 _VOWELS = set("aeiouyáéíóúüàèìòùâêîôûäëïö")
@@ -179,11 +195,50 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
                 key = tuple(t for _, t, _ in line)
                 g = options[n].setdefault(key, {"line": line, "weight": 0.0})
                 g["weight"] += c.weight
-        sop = [e for e in m.voices.get(lyric_voice(m), []) if e.is_attack]
+        lead = lyric_voice(m)
+        sop = [e for e in m.voices.get(lead, []) if e.is_attack]
+        sop = sorted(sop + [e for e in m.voices.get(PARTNER[lead], [])
+                            if e.is_attack and holding(m.voices.get(lead, []), e.offset)],
+                     key=lambda e: e.offset)
         for n, opts in sorted(options.items()):
             best = min(opts.values(), key=lambda g: (any(_suspicious_syllable(t) for _, t, _ in g["line"]),
-                                                     len(g["line"]) > len(sop), -g["weight"]))
+                                                     len(g["line"]) > len(sop), -len(g["line"]), -g["weight"]))
             _attach_lyrics(m, n, best["line"], sop)
+
+        # ---- the men's own words: printed under the lower staff while the upper staff hums
+        # or rests («Cuando suene la trompeta»: «Tra-ba-je-mos, pues, por Cris-to» under «Uh»)
+        upper_text = [t for e in m.voices.get(lyric_voice(m), []) for t, _ in e.lyrics.values()]
+        chosen: dict[str, dict[int, list]] = {}
+        for v in ("tenor", "bass"):
+            if v == lyric_voice(m):
+                continue
+            lines: dict[int, dict[int, list]] = defaultdict(dict)
+            for c, j in aligned:
+                for e in c.score.measures[j].voices.get(v, []):
+                    for n, (text, syl) in e.lyrics.items():
+                        if any(ch.lower() in _VOWELS for ch in text):
+                            lines[n].setdefault(id(c), []).append((e.offset, text, syl))
+            for n, per_reading in lines.items():
+                opts: dict[tuple, dict] = {}
+                for cid, line in per_reading.items():
+                    c = next(c for c, _ in aligned if id(c) == cid)
+                    g = opts.setdefault(tuple(t for _, t, _ in line), {"line": line, "weight": 0.0})
+                    g["weight"] += c.weight
+                best = max(opts.values(), key=lambda g: g["weight"])["line"]
+                if [t for _, t, _ in best] != upper_text:
+                    chosen.setdefault(v, {})[n] = best
+        for n in {n for lines in chosen.values() for n in lines}:
+            # the staff's whole line: the voice that moves with the words gets them; one that
+            # holds long notes with the upper staff (catching a syllable or two) does not
+            full = max(len(lines.get(n, [])) for lines in chosen.values())
+            for v, lines in chosen.items():
+                attacks = {e.offset: e for e in m.voices.get(v, []) if e.is_attack}
+                hit = [(off, text, syl) for off, text, syl in lines.get(n, []) if off in attacks]
+                if len(hit) < 0.5 * full:
+                    continue
+                for off, text, syl in hit:
+                    attacks[off].lyrics[n] = (text, syl)
+                m.own_words = True
 
         # ---- time and key signature: by majority (an engine may miss a signature on page 2)
         sig_tallies.append(_signature_tally(aligned, marks_engines))
@@ -192,22 +247,25 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
         m.marks = _vote_marks([(c, j) for c, j in aligned if c.engine in marks_engines])
 
         # ---- crop image: from the most natural-looking reading that knows where this measure is
-        for variant in CROP_PREFERENCE:
-            src = next(((c, j) for c, j in aligned
-                        if c.variant == variant and c.score.measures[j].bbox), None)
-            if src:
-                c, j = src
-                m.bbox, m.page, m.image_dir = c.score.measures[j].bbox, c.score.measures[j].page, c.image_dir
-                break
+        # and saw all its staves (a reading that missed the upper staff crops only the lower one,
+        # «A Cristo coronad»)
+        def placed(attr, preference):
+            found = [(c, j) for c, j in aligned if getattr(c.score.measures[j], attr)]
+            rank = {v: i for i, v in enumerate(preference)}
+            found = [cj for cj in found if cj[0].variant in rank]
+            return min(found, key=lambda cj: (-len(cj[0].score.measures[cj[1]].staves), rank[cj[0].variant]),
+                       default=None)
+
+        src = placed("bbox", CROP_PREFERENCE)
+        if src:
+            c, j = src
+            m.bbox, m.page, m.image_dir = c.score.measures[j].bbox, c.score.measures[j].page, c.image_dir
 
         # ---- geometry for analysis by synthesis: the sharpest image that knows where this measure is
-        for variant in GEOMETRY_PREFERENCE:
-            src = next(((c, j) for c, j in aligned
-                        if c.variant == variant and c.score.measures[j].geometry), None)
-            if src:
-                c, j = src
-                m.geometry, m.geometry_dir = c.score.measures[j].geometry, c.image_dir
-                break
+        src = placed("geometry", GEOMETRY_PREFERENCE)
+        if src:
+            c, j = src
+            m.geometry, m.geometry_dir = c.score.measures[j].geometry, c.image_dir
 
         # ---- agreement
         weak = {v: d for v, d in m.votes.items() if d["weight"] / total < min_agree}
@@ -229,7 +287,7 @@ def _fix_endings(voted: ChoralScore) -> None:
     """Make the 1st/2nd-time endings consistent.
 
     - An ending belongs to a repeat: a run of endings with no :| in it (nor right before it)
-      is a misreading (Audiveris put endings on measures 1-4 of «A Cristo coronad») and goes,
+      is a misreading, unless it is a 1st and 2nd ending closing the piece (back to the start) (Audiveris put endings on measures 1-4 of «A Cristo coronad») and goes,
       unless a :| comes a few measures later (a short bracket: the ending reaches the :|).
     - Inside one run the numbers only go up: a "1" after a "2" is a misread of the 2nd ending
       (its bracket is often drawn open, without an end).
@@ -245,7 +303,12 @@ def _fix_endings(voted: ChoralScore) -> None:
         end = k
         while end + 1 < len(ms) and ms[end + 1].marks.volta is not None:
             end += 1
-        if not any(ms[j].marks.repeat_end for j in range(max(0, k - 3), end + 1)):
+        # A 1st ending then a 2nd ending that closes the piece, with no :| at all: going back
+        # to the beginning is implied (hymns with the stanzas stacked, «¿Cómo podré estar
+        # triste?»). Audiveris does not invent a pair like that at the very end.
+        numbers = [ms[j].marks.volta for j in range(k, end + 1)]
+        implied = end == len(ms) - 1 and numbers[0] == 1 and 2 in numbers and numbers == sorted(numbers)
+        if not implied and not any(ms[j].marks.repeat_end for j in range(max(0, k - 3), end + 1)):
             # the bracket may be drawn short: the ending goes on to a :| a few measures later
             close = next((j for j in range(end + 1, min(len(ms), end + 5))
                           if ms[j].marks.repeat_end or ms[j].marks.volta is not None), None)

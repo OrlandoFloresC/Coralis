@@ -88,7 +88,11 @@ def performance_order(cs: ChoralScore) -> tuple[list[Step], list[tuple[int, str]
             i, start, pass_no = coda_at, coda_at, (pass_no if rearmed else 1)
             jumped, leave_at, coda_at, rearmed = False, None, None, False
             continue
-        if m.repeat_end and not jumped and i not in repeated and (i, pass_no) not in taken:
+        # the last measure of a 1st ending with no :| (the next measure starts the 2nd): back
+        # to the start all the same
+        implied = (not m.repeat_end and m.volta is not None and i + 1 < n
+                   and ms[i + 1].marks.volta is not None and ms[i + 1].marks.volta > max(_passes(m)))
+        if (m.repeat_end or implied) and not jumped and i not in repeated and (i, pass_no) not in taken:
             numbers = _ending_numbers(cs, i) if m.volta is not None else []
             if not numbers or any(x > pass_no for x in numbers):
                 taken.add((i, pass_no))  # never the same repeat twice on the same pass
@@ -194,7 +198,27 @@ def _real_lines(cs: ChoralScore) -> set[int]:
     if not count:
         return set()
     biggest = max(count.values())
-    return {n for n, k in count.items() if k >= max(2, 0.15 * biggest) or n == 1}
+    real = {n for n, k in count.items() if k >= max(2, 0.15 * biggest) or n == 1}
+    return {n for n in real if n == 1 or not _echoes_line_1(cs, n)}
+
+
+def _echoes_line_1(cs: ChoralScore, n: int) -> bool:
+    """Line n repeats line 1's words wherever it appears: the words of other voices in a
+    chorus («¿Cómo podré estar triste?»: the men's «Feliz cantando alegre» under their own
+    notes), not another stanza."""
+    same = total = 0
+    for m in cs.measures:
+        words = {}
+        for evs in m.voices.values():
+            for e in evs:
+                for k, (text, _) in e.lyrics.items():
+                    if k in (1, n) and any(c.isalpha() for c in text):
+                        words.setdefault(k, {})[e.offset] = text.strip(",.;:!?¡¿ ").lower()
+        if words.get(n):
+            total += 1
+            line, first = words[n], words.get(1, {})
+            same += sum(first.get(off) == t for off, t in line.items()) >= len(line) / 2
+    return total > 0 and same >= 0.6 * total
 
 
 def lyric_line(cs: ChoralScore, steps: list[Step]) -> dict:
@@ -215,3 +239,107 @@ def lyric_line(cs: ChoralScore, steps: list[Step]) -> dict:
     if repeated and twice > once >= 1:
         return {"stanzas": once, "shift": once}
     return {"stanzas": max(once, twice, 1), "shift": 0}
+
+
+def drop_echo_lines(cs: ChoralScore) -> list[int]:
+    """Remove lyric lines that only repeat line 1 (other voices' words in a chorus), so they
+    are not counted as stanzas; higher lines move down. Returns the removed line numbers."""
+    top = cs.verses
+    gone = [n for n in range(2, top + 1) if _echoes_line_1(cs, n)]
+    if not gone:
+        return []
+    new_no = {}
+    for n in range(1, top + 1):
+        if n not in gone:
+            new_no[n] = len(new_no) + 1
+    for m in cs.measures:
+        for evs in m.voices.values():
+            for e in evs:
+                if e.lyrics:
+                    e.lyrics = {new_no[k]: v for k, v in e.lyrics.items() if k in new_no}
+    return gone
+
+
+def _lines_in(m) -> dict[int, dict]:
+    """{line: {offset: (text, syllabic)}} of a measure, over all voices."""
+    out: dict[int, dict] = {}
+    for evs in m.voices.values():
+        for e in evs:
+            for n, syl in e.lyrics.items():
+                if any(c.isalpha() for c in syl[0]):
+                    out.setdefault(n, {}).setdefault(e.offset, syl)
+    return out
+
+
+def split_part_lines(cs: ChoralScore, alone: int = 8) -> list[int]:
+    """Lines that are other voices' words, not stanzas, moved onto those voices.
+
+    One stanza where, from some point on, the men answer the melody with their own words
+    («Cuando la pena»: the tenors sing «No te a-co-bar-des», the basses «No te a-co-bar-des
+    fren-te a la pe-na»), printed as extra lines. A line that first appears after at least
+    `alone` measures where line 1 was alone is such a line (stanzas start together).
+    In a measure with line 1 and another line, the upper staff sings line 1 and the lower
+    staff the last other line; with no line 1, everybody sings the other line.
+    Returns the line numbers moved (empty: nothing done)."""
+    alone_before: dict[int, int] = {}
+    seen: set[int] = set()
+    count = 0
+    for m in cs.measures:
+        lines = _lines_in(m)
+        for n in lines:
+            if n not in seen:
+                seen.add(n)
+                alone_before[n] = count
+        if set(lines) == {1}:
+            count += 1
+    late = sorted(n for n in seen if n >= 2 and alone_before.get(n, 0) >= alone)
+    # stanzas printed after a chorus («Bálsamo existe») start late too, but they lie under
+    # the same notes as line 1; the men's own words keep another rhythm, or go alone
+    parts = late if late and _own_rhythm(cs, late) else []
+    if not parts or len(parts) != len(seen - {1}):
+        return []
+    for m in cs.measures:
+        lines = _lines_in(m)
+        others = [n for n in parts if n in lines]
+        if not others:
+            continue
+        upper = lines.get(1) or lines[others[0]]
+        lower = lines[others[-1]]
+        m.own_words = True
+        for v, evs in m.voices.items():
+            words = upper if v in ("soprano", "alto") else lower
+            for e in evs:
+                e.lyrics = {}
+            attacks = [e for e in evs if e.takes_syllable]
+            if len(attacks) < len(words):  # a slur misread over the notes that carry the words
+                attacks = [e for e in evs if e.is_attack]
+            _place(words, attacks)
+    return parts
+
+
+def _own_rhythm(cs: ChoralScore, lines_: list[int]) -> bool:
+    """These lines go without line 1, or on other notes, in at least half the measures they
+    are in (taken together: a line seen in two measures says little on its own)."""
+    apart = total = 0
+    for m in cs.measures:
+        lines = _lines_in(m)
+        for n in lines_:
+            if n not in lines:
+                continue
+            total += 1
+            first = set(lines.get(1, {}))
+            apart += not first or len(first & set(lines[n])) < 0.5 * len(lines[n])
+    return total > 0 and apart >= 0.5 * total
+
+
+def _place(words: dict, attacks: list) -> None:
+    """Syllables (by offset) onto a voice's attacks, in order: each on the attack at or just
+    before its offset (the words were read under another staff's notes)."""
+    j = 0
+    for off in sorted(words):
+        if j >= len(attacks):
+            break
+        while j + 1 < len(attacks) and attacks[j + 1].offset <= off:
+            j += 1
+        attacks[j].lyrics = {1: words[off]}
+        j += 1

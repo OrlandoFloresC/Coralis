@@ -43,3 +43,28 @@ def test_one_rest_printed_for_both_voices_of_a_staff():
     lower = [raw(0, 1, "D3"), raw(1, 2, "D#3")]
     bass = _voice_from(lower, [upper], "bottom", Fr(4))
     assert [(e.pitch, e.offset, e.filled) for e in bass] == [("D3", 0, False), ("D#3", 1, False), (None, 3, False)]
+
+
+def test_voices_ordered_by_stems_not_pitch():
+    # «Castillo fuerte»: the alto (stems down) holds c♭ while the soprano (stems up) runs
+    # c♭ b♭ a♭ g♭, so the alto is higher on average; the soprano is still the stem-up voice.
+    # A crossing wider than a fifth is a misread note, and then pitch decides.
+    from fractions import Fraction as Fr
+
+    from music21 import pitch as p
+
+    from omr_coral.model.score import RawEvent, _order_layers
+
+    def raw(off, dur, name, stem, layer):
+        return RawEvent(Fr(off), Fr(dur), [p.Pitch(name)], [None], layer=layer, stem=stem)
+
+    sop = [raw(0, 0.5, "C-4", "up", "1"), raw(0.5, 0.5, "B-3", "up", "1"),
+           raw(1, 1, "A-3", "up", "1"), raw(2, 1, "G-3", "up", "1")]
+    alt = [raw(0, 2, "C-4", "down", "2"), raw(2, 1, "B-3", "down", "2")]
+    assert _order_layers([alt, sop])[0] is sop
+    no_stems = [[RawEvent(e.offset, e.duration, e.pitches, e.ties, layer=e.layer) for e in l] for l in (sop, alt)]
+    assert _order_layers(no_stems[::-1])[0] is no_stems[0]   # voice 1 = upper
+
+    up = [raw(0, 1, "A-3", "up", "6"), raw(1, 1, "A-2", "up", "6")]
+    down = [raw(0, 1, "A-3", "down", "7"), raw(1, 1, "A-3", "down", "7")]
+    assert _order_layers([up, down])[0] is down
