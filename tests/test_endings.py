@@ -169,3 +169,28 @@ def test_chorus_upbeat_on_line_2_and_alto_echo_are_sung_by_every_stanza():
     for start in (0, 7):  # stanza 1, and stanza 2 after its silent measure
         assert sung(out.measures[start + 1], "soprano")[-1] == "Muy"
         assert sung(out.measures[start + 2], "alto") == ["sa2", "muy", "can"]
+
+
+def test_a_three_eight_bar_inside_six_eight_is_kept_short():
+    # «Exaltado sea tu nombre»: «3/8 … 6/8» read as 6/8 (or 9/8) by the engines; the voices fill
+    # three eighths and the rest is only padding (or an extra padding past the bar)
+    from omr_coral.voting.vote import _fit_bars
+
+    def bar(i, notes, pad=Fr(0)):
+        m = Measure(index=i, system=1, page=None, staves=[], time=(6, 8), bar_length=Fr(3), duration=Fr(3))
+        evs = [Event(Fr(k, 2), Fr(1, 2), p) for k, p in enumerate(notes)]
+        end = Fr(len(notes), 2)
+        if pad:
+            evs.append(Event(end, pad, filled=True))
+        m.voices = {v: [copy.deepcopy(e) for e in evs] for v in VOICES}
+        return m
+
+    import copy
+    ms = [bar(0, ["C4"] * 6), bar(1, ["G4", "F4", "E-4"], Fr(3)), bar(2, ["D4"] * 6, Fr(3, 2))]
+    cs = ChoralScore(Path("x"), ms, [])
+    issues = []
+    _fit_bars(cs, issues)
+    assert ms[1].time == (3, 8) and ms[1].bar_length == Fr(3, 2)
+    assert sum(e.duration for e in ms[1].voices["bass"]) == Fr(3, 2)
+    assert sum(e.duration for e in ms[2].voices["soprano"]) == Fr(3)   # padding past the bar went
+    assert ms[0].time == (6, 8)

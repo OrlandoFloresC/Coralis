@@ -32,8 +32,16 @@ jobs:
       - name: Tests
         run: python -m pytest -q
 
+      # Python asks Windows (WMI) for the processor type, and on GitHub's machines that query
+      # sometimes comes back empty (KeyError: 'Architecture' inside platform.py): try again.
       - name: Build Coralis.exe
-        run: pyinstaller --noconfirm --distpath dist --workpath build packaging/coralis.spec
+        shell: bash
+        run: |
+          for try in 1 2 3; do
+            pyinstaller --noconfirm --distpath dist --workpath build packaging/coralis.spec && exit 0
+            echo "Build failed (try $try), retrying in 20 s"; sleep 20
+          done
+          exit 1
 
       - name: Check the app opens its libraries
         run: dist\Coralis\Coralis.exe --check

@@ -93,6 +93,7 @@ _STRONG_PAIR = re.compile(r"([aeoáéíóú])([aeoáéíóú])", re.IGNORECASE)
 # The OCR reads the elision tie "‿" as a letter "v": "doven" = "do‿en", "devho" = "de‿ho".
 # A "v" between vowels inside ONE syllable cannot be Spanish ("a-ve", "nue-va": v starts a
 # syllable). "...ve" at the end is left alone: English "love", "give".
+_Y_V = re.compile(rf"^([yY])v(?=h?[{_V}])")
 _V_MARK = re.compile(rf"(?<![{_V}])([{_V}])v(h?[{_V}])", re.IGNORECASE)  # not after a diphthong: "nueva"
 
 
@@ -109,6 +110,7 @@ _BRACKET_FOR_J = re.compile(r"(?<![^\W\d_])\](?=[a-záéíóúñ])")  # "]eho-v�
 
 # Spanish words have no apostrophe; a word does not start with "Il" + a, e, o (it is "ll").
 _APOSTROPHE = re.compile(r"(?<=[^\W\d_])['’`´](?=[^\W\d_])")
+_L_FOR_I = re.compile(r"(?<![^\W\d_])([mnsdrMNSDR])l(?=[a-záéíóúv])")
 _I_FOR_LL = re.compile(r"(^|[\s¿¡(\"“])Il(?=[aeoáéó])")
 
 
@@ -121,6 +123,7 @@ def fix_ocr_letters(text: str, spanish: bool = True) -> str:
         return text
     text = _APOSTROPHE.sub("", text)        # «p’e»: a speck read as an apostrophe
     text = _I_FOR_LL.sub(r"\1ll", text)     # «Ila», «Ilan»: "ll" read as "Il"
+    text = _L_FOR_I.sub(r"\1i", text)       # «mlva» = «mi‿a»: no word starts with "ml", "nl", "sl"...
     return _I_FOR_L.sub("l", text)
 
 
@@ -130,6 +133,8 @@ def fix_ocr_syllable(text: str, spanish: bool = True) -> str:
     if ELISION in text or " " in text.strip():
         return text
     fixed = _V_MARK.sub(lambda m: _v_to_mark(m, spanish), text)
+    if spanish:  # «yva» = «y‿a»: no Spanish word starts with "yv"
+        fixed = _Y_V.sub(rf"\1{ELISION}", fixed)
     if spanish and fixed == text:
         # Two strong vowels never share a syllable in Spanish ("mo-a", "da-a"): a lost mark.
         fixed = _STRONG_PAIR.sub(lambda m: f"{m.group(1)}{ELISION}{m.group(2)}", text, count=1)

@@ -646,11 +646,12 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
         prev = merged[-1] if merged else None
         if (prev and len(prev["rows"]) + len(s["rows"]) <= max(target, 2)
                 and prev["count"] == s["count"] and s["rows"] and prev["rows"]
-                and CLEF_RANK[prev["rows"][-1][0].clef] <= CLEF_RANK[s["rows"][0][0].clef]
-                and (prev["layout"] and s["layout"]
-                     and _stacks_aligned(prev["layout"][-1], s["layout"][0], page_w)
-                     or not (prev["layout"] and s["layout"])
-                     and CLEF_RANK[prev["rows"][-1][0].clef] < CLEF_RANK[s["rows"][0][0].clef])):
+                # the upper staff of a choir system has a higher clef than the lower one: two
+                # one-staff systems in the same clef are two solo systems one after the other
+                # («Primer mandamiento» c.45-52: the men in unison, bass clef, two systems)
+                and CLEF_RANK[prev["rows"][-1][0].clef] < CLEF_RANK[s["rows"][0][0].clef]
+                and (not (prev["layout"] and s["layout"])
+                     or _stacks_aligned(prev["layout"][-1], s["layout"][0], page_w))):
             prev["rows"] += s["rows"]
             prev["layout"] += s["layout"]
             prev["repaired"] = True

@@ -277,10 +277,90 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
         details["measures"].append(m_detail)
 
     _resolve_signatures(voted, sig_tallies)
+    _fit_bars(voted, issues)
     _fix_endings(voted)
     _layout_fallback(voted, cands)
     _drop_phantoms(voted, cands, maps, marks_engines, issues, details)
     return voted, issues, details
+
+
+def _sung_end(events: list[Event]) -> Fraction:
+    return max((e.end for e in events if not e.filled), default=Fraction(0))
+
+
+def _fit_bars(voted: ChoralScore, issues: list[Issue]) -> None:
+    """Make each measure as long as its bar.
+
+    - Padding the pipeline added (filled rests) past the bar goes: a reading that took the
+      bar for longer («Exaltado sea tu nombre»: Audiveris read «3/8 … 6/8» as 9/8 and kept it
+      for 50 measures) leaves its padding on the notes it won.
+    - A short bar the engines all missed (a 3/8 measure inside a 6/8 piece): every voice that
+      sings ends at the same point before the bar's end, the rest is only padding, and the
+      measure is not one half of a measure cut by a system break → it is a bar of that length.
+    """
+    ms = voted.measures
+    for m in ms:
+        for v, evs in m.voices.items():
+            kept = [e for e in evs if not (e.filled and e.offset >= m.bar_length)]
+            for e in kept:
+                if e.filled and e.end > m.bar_length:
+                    e.duration = m.bar_length - e.offset
+            m.voices[v] = kept
+    for k, m in enumerate(ms):
+        if k in (0, len(ms) - 1) or m.pickup or m.time[1] != 8:
+            continue
+        singing = {v: evs for v, evs in m.voices.items() if any(not e.is_rest for e in evs)}
+        if len(singing) < 2:
+            continue
+        unit = Fraction(1, 2)  # an eighth, in quarter notes
+        fits = sorted({_sung_end(evs) for evs in singing.values()})
+        length = fits[0]
+        if not (0 < length < m.bar_length) or length % unit:
+            continue
+        if len(fits) > 1:
+            # some voices won a version with something extra (the cautionary «6/8» at the end
+            # of the 3/8 bar read as a note or a rest): another reading of them may fit
+            swap = {}
+            for v, evs in singing.items():
+                if _sung_end(evs) == length:
+                    continue
+                alt = next((g for g in m.alternatives.get(v, [])
+                            if any(not e.is_rest for e in g["events"]) and _sung_end(g["events"]) == length), None)
+                if alt is None:
+                    break
+                swap[v] = alt
+            else:
+                for v, g in swap.items():
+                    # the voted words go on the new notes in order (not the other reading's OCR)
+                    words = [e.lyrics for e in m.voices[v] if e.lyrics]
+                    m.voices[v] = copy.deepcopy(g["events"])
+                    attacks = [e for e in m.voices[v] if e.is_attack]
+                    for e in m.voices[v]:
+                        e.lyrics = {}
+                    for e, ly in zip(attacks, words):
+                        e.lyrics = dict(ly)
+                    for alt in m.alternatives[v]:
+                        alt["chosen"] = alt is g
+            if any(_sung_end(evs) != length for v, evs in m.voices.items() if v in singing):
+                continue
+        if any(not e.filled for evs in m.voices.values() for e in evs if e.offset >= length):
+            continue  # printed rests after the notes: the bar is full
+        neighbours = [_sung_end_all(ms[j]) for j in (k - 1, k + 1)]
+        if any(n < ms[j].bar_length and n + length == m.bar_length for n, j in zip(neighbours, (k - 1, k + 1))):
+            continue  # one half of a measure cut by a system break
+        new = (int(length / unit), 8)
+        issues.append(Issue("estructura", "info",
+                            f"Compás de {new[0]}/8 (las voces llenan {new[0]} corcheas) leído como "
+                            f"{m.time[0]}/{m.time[1]}.", m.index))
+        m.time, m.bar_length, m.duration = new, length, length
+        for st in m.staves:
+            st.time = new
+        for v, evs in m.voices.items():
+            m.voices[v] = [e for e in evs if e.offset < length]
+
+
+def _sung_end_all(m) -> Fraction:
+    return max((_sung_end(evs) for evs in m.voices.values()), default=Fraction(0))
 
 
 def _fix_endings(voted: ChoralScore) -> None:

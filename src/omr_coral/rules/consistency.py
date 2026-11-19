@@ -28,7 +28,11 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
                                 "Indicaciones de tempo distintas: " + ", ".join(f"♩={t:g}" for t in sorted(tempos)) + ".",
                                 m.index))
         # A change of time or key mid-piece is legal but a classic OMR misread: flag for a look.
-        if prev_time and m.time != prev_time:
+        # A bar every voice fills exactly, with nothing added by the pipeline, confirms it.
+        filled_exactly = all(
+            sum(e.duration for e in evs) == m.bar_length and not any(e.filled for e in evs)
+            for evs in m.voices.values() if any(not e.is_rest for e in evs))
+        if prev_time and m.time != prev_time and not filled_exactly:
             issues.append(Issue("coherencia", "aviso",
                                 f"Cambio de compás {prev_time[0]}/{prev_time[1]} → {m.time[0]}/{m.time[1]}.", m.index))
         if prev_key is not None and m.key_fifths != prev_key:

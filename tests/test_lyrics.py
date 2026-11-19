@@ -101,3 +101,18 @@ def test_ocr_apostrophe_and_il_for_ll():
     assert fix_ocr_letters("(Ilamen") == "(llamen"
     assert fix_ocr_letters("Iglesia") == "Iglesia"
     assert fix_ocr_letters("Ilu") == "Ilu"           # «I-lu-mi-na»: a real "Il"
+
+
+def test_ocr_l_for_i_at_word_start():
+    from omr_coral.model.lyrics_fix import fix_ocr_syllable
+
+    assert fix_ocr_syllable("mlva") == "mi‿a"   # «Cristo Señor»: «mi‿a-po-yo»
+    assert fix_ocr_syllable("Dlos") == "Dios"
+    assert fix_ocr_syllable("flor") == "flor" and fix_ocr_syllable("pla") == "pla"
+
+
+def test_ocr_y_v_is_an_elision():
+    from omr_coral.model.lyrics_fix import fix_ocr_syllable
+
+    assert fix_ocr_syllable("yva") == "y‿a"   # «Primer mandamiento»: «y‿a-quel»
+    assert fix_ocr_syllable("ya") == "ya"
