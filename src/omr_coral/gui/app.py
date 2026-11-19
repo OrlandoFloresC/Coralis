@@ -234,6 +234,21 @@ class Api:
         finally:
             self._busy = False
 
+    # ------------------------------------------------------------------ new version
+    def check_update(self) -> dict:
+        from .updates import check
+
+        return check()
+
+    def open_download(self, url: str) -> None:
+        """Open a release download in the browser (only links of Coralis on GitHub)."""
+        import webbrowser
+
+        from .updates import REPO
+
+        if url.startswith(f"https://github.com/{REPO}/"):
+            webbrowser.open(url)
+
     def open_work_dir(self) -> None:
         _open_path(work_dir())
 

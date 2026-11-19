@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omr-coral"
-version = "0.3.0"
+version = "0.3.1"
 description = "Optical music recognition pipeline with auto-correction for SATB choral scores (PDF/photo -> MusicXML)."
 readme = "README.md"
 requires-python = ">=3.11"
