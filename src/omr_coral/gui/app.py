@@ -8,6 +8,7 @@ background thread and reports back with `window.evaluate_js("onProgress(...)")`.
 from __future__ import annotations
 
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -63,6 +64,9 @@ def _open_path(path: Path) -> None:
         subprocess.Popen(["xdg-open", str(path)])
 
 
+PENDING = "pendiente_rehacer.txt"  # corrections saved, the score not rebuilt yet
+
+
 class Api:
     def __init__(self) -> None:
         self._window: webview.Window | None = None
@@ -70,6 +74,15 @@ class Api:
         self._busy = False
 
     # ------------------------------------------------------------------ helpers
+    def _fresh(self, run: Path) -> None:
+        """Changes were saved without rebuilding: rebuild before showing or giving out results."""
+        from ..pipeline import validate_run
+
+        flag = run / PENDING
+        if flag.exists():
+            validate_run(run, self._cfg)
+            flag.unlink(missing_ok=True)
+
     def _js(self, fn: str, payload) -> None:
         if self._window:
             self._window.evaluate_js(f"{fn}({json.dumps(payload, ensure_ascii=False)})")
@@ -144,6 +157,8 @@ class Api:
         from ..tools import find_musescore
 
         run = Path(run_dir)
+        if what != "folder":
+            self._fresh(run)
         if what == "folder":
             _open_path(run)
         elif what == "report":
@@ -167,6 +182,7 @@ class Api:
         from ..pipeline import validate_run
 
         run = Path(run_dir)
+        self._fresh(run)
         if not (run / "compases.json").exists():  # made before the review existed
             validate_run(run, self._cfg)
         measures = json.loads((run / "compases.json").read_text(encoding="utf-8"))
@@ -199,6 +215,7 @@ class Api:
         from ..pipeline import validate_run
 
         run = Path(run_dir)
+        self._fresh(run)
         if not (run / "versiones.json").exists():
             validate_run(run, self._cfg)
         measures = json.loads((run / "versiones.json").read_text(encoding="utf-8"))
@@ -230,7 +247,9 @@ class Api:
                             pickup=meta["pickup"], bar_length=Fraction(meta["bar_length"]),
                             duration=Fraction(meta["duration"]))
         evs = [Event(Fraction(e["offset"]), Fraction(e["duration"]), e.get("pitch"), tie=e.get("tie"),
-                     filled=bool(e.get("filled"))) for e in events]
+                     filled=bool(e.get("filled")), slur_cont=bool(e.get("slur")),
+                     lyrics={1: (e["lyric"], e.get("syl") or "single")} if e.get("lyric") else {})
+               for e in events]
         try:
             return render_voice_svg(m, voice, evs, self._cfg)
         except Exception:  # noqa: BLE001
@@ -244,6 +263,7 @@ class Api:
     def measure_data(self, run_dir: str, label: str) -> dict:
         """Any measure, by the number the user sees (for «Ir al compás…»)."""
         run = Path(run_dir)
+        self._fresh(run)
         if not (run / "notas.json").exists():
             from ..pipeline import validate_run
             validate_run(run, self._cfg)
@@ -272,6 +292,7 @@ class Api:
         from ..pipeline import final_file
 
         run = Path(run_dir)
+        self._fresh(run)
         path = final_file(run)
         if path is None:
             return {"ok": False, "error": "Todavía no hay partitura para escuchar."}
@@ -304,6 +325,157 @@ class Api:
                 "voices": [{"id": v, "name": names[v]["name"], "notes": voices[v], "words": words[v]}
                            for v in VOICES]}
 
+    # ------------------------------------------------------------------ editing the words
+    def lyrics_text(self, run_dir: str) -> dict:
+        """The words of every stanza as plain text: the user's file if there is one, else what
+        the OCR read (syllables joined back into words), for the user to correct."""
+        from ..pipeline import LYRICS_FILE, validate_run
+
+        run = Path(run_dir)
+        self._fresh(run)
+        own = run / LYRICS_FILE
+        if own.exists():
+            return {"text": own.read_text(encoding="utf-8-sig"), "from_file": True,
+                    "title": self._summary(run)["title"]}
+        if not (run / "notas.json").exists() or "words" not in (run / "notas.json").read_text(encoding="utf-8")[:20000]:
+            validate_run(run, self._cfg)
+        measures = json.loads((run / "notas.json").read_text(encoding="utf-8"))
+        lines = sorted({int(n) for m in measures for n in m.get("words", {})})
+        blocks = []
+        for n in lines:
+            text = ""
+            for m in measures:
+                for _off, syl_text, syl in m.get("words", {}).get(str(n), []):
+                    piece = syl_text.replace("‿", " ")
+                    text += piece + ("" if syl in ("begin", "middle") else " ")
+            text = " ".join(text.split())
+            # one line per phrase, so that it reads like the hymnal
+            text = re.sub(r"([;:.!?])\s*(?=[^\s.,;:!?)»”])", r"\1\n", text)
+            text = re.sub(r",(?=\S)", ", ", text)
+            blocks.append(f"{n}. {text}")
+        return {"text": "\n\n".join(blocks), "from_file": False, "title": self._summary(run)["title"]}
+
+    def save_lyrics(self, run_dir: str, text: str | None) -> dict:
+        """Save the corrected words (None: back to what the OCR read) and rebuild the score."""
+        from ..pipeline import LYRICS_FILE
+
+        if self._busy:
+            return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        run = Path(run_dir)
+        own = run / LYRICS_FILE
+        if text is None:
+            if own.exists():
+                own.unlink()
+        else:
+            if not text.strip():
+                return {"ok": False, "error": "La letra está vacía."}
+            own.write_text(text.strip() + "\n", encoding="utf-8")
+        self._busy = True
+        threading.Thread(target=self._revalidate, args=(run, "onLyricsDone"), daemon=True).start()
+        return {"ok": True}
+
+    # ------------------------------------------------------------------ words note by note
+    def lyric_editor_data(self, run_dir: str) -> dict:
+        """Every measure with the notes of the voice that carries the words and the words on
+        them, stanza by stanza (as the score stands now)."""
+        from ..pipeline import validate_run
+
+        run = Path(run_dir)
+        self._fresh(run)
+        p = run / "notas.json"
+        if not p.exists() or '"lyric_voice"' not in p.read_text(encoding="utf-8")[:50000]:
+            validate_run(run, self._cfg)
+        measures = json.loads(p.read_text(encoding="utf-8"))
+        # the versions the readings gave, where they disagreed (to pick another one here too)
+        versions = {}
+        vp = run / "versiones.json"
+        if vp.exists():
+            for vm in json.loads(vp.read_text(encoding="utf-8")):
+                versions[vm["index"]] = {v: [{"key": o["key"], "events": o.get("events", []), "votes": o["votes"],
+                                              "total": o["total"], "chosen": o["chosen"], "edited": o.get("edited", False)}
+                                             for o in info["options"] if not o.get("edited")]
+                                         for v, info in vm["voices"].items()}
+        out = []
+        for m in measures:
+            lead = m.get("lyric_voice", "soprano")
+            out.append({k: m[k] for k in ("index", "label", "number", "key", "time", "pickup", "bar_length", "duration")}
+                       | {"voice": lead, "voices": m["voices"], "words": m.get("words", {}),
+                          "vwords": m.get("vwords", {}), "own_words": m.get("own_words", False),
+                          "versions": {v: o for v, o in versions.get(m["index"], {}).items() if len(o) > 1}})
+        lines = max([int(n) for m in measures for n in m.get("words", {})] + [1])
+        names = self._cfg["output"]["parts"]
+        return {"title": self._summary(run)["title"], "measures": out, "verses": lines,
+                "voice_names": {v: names[v]["name"] for v in names}}
+
+    def measure_thumb(self, run_dir: str, index: int) -> str | None:
+        crop = Path(run_dir) / "report" / "img" / f"m{int(index):03d}.png"
+        return _thumb(crop, width=1000) if crop.exists() else None
+
+    def save_editor(self, run_dir: str, choices: dict, edits: dict, lyrics: dict, rebuild: bool = True,
+                    rhythm: dict | None = None, voice_lyrics: dict | None = None) -> dict:
+        """Everything the editor changed, at once: versions picked, notes fixed, words typed.
+        rebuild=False only saves (instant): the score is rebuilt later, before it is shown or
+        given out, or when the user asks."""
+        from ..model import corrections
+
+        if self._busy:
+            return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        run = Path(run_dir)
+        data = corrections.load(run)
+        for key, per_voice in (choices or {}).items():
+            data.setdefault("voices", {}).setdefault(str(key), {}).update(per_voice)
+        fixed = data.setdefault("edits", {})
+        for key, per_voice in (edits or {}).items():
+            for v, notes in per_voice.items():
+                if notes:
+                    fixed.setdefault(str(key), {})[v] = notes
+                else:
+                    fixed.get(str(key), {}).pop(v, None)
+            if not fixed.get(str(key)):
+                fixed.pop(str(key), None)
+        moved = data.setdefault("rhythm", {})
+        for idx, per_voice in (rhythm or {}).items():
+            for v, rows in per_voice.items():
+                moved.setdefault(str(idx), {})[v] = rows
+                fixed.get(str(idx), {}).pop(v, None)  # the pitches travel with the rhythm now
+        own = data.setdefault("voice_lyrics", {})
+        for idx, per_voice in (voice_lyrics or {}).items():
+            for v, lines in per_voice.items():
+                for line, notes in lines.items():
+                    own.setdefault(str(idx), {}).setdefault(v, {})[str(line)] = notes
+        typed = data.setdefault("lyrics", {})
+        for idx, lines in (lyrics or {}).items():
+            for line, notes in lines.items():
+                typed.setdefault(str(idx), {})[str(line)] = notes
+        corrections.save(run, data)
+        if not rebuild:
+            (run / PENDING).write_text("Correcciones guardadas; falta rehacer la partitura.\n", encoding="utf-8")
+            return {"ok": True, "pending": True}
+        return self.rebuild(run_dir)
+
+    def rebuild(self, run_dir: str) -> dict:
+        if self._busy:
+            return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        self._busy = True
+        threading.Thread(target=self._revalidate, args=(Path(run_dir), "onEditorDone"), daemon=True).start()
+        return {"ok": True}
+
+    def save_lyric_notes(self, run_dir: str, edits: dict) -> dict:
+        from ..model import corrections
+
+        if self._busy:
+            return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        run = Path(run_dir)
+        data = corrections.load(run)
+        typed = data.setdefault("lyrics", {})
+        for idx, lines in (edits or {}).items():
+            for line, notes in lines.items():
+                typed.setdefault(str(idx), {})[str(line)] = notes
+        corrections.save(run, data)
+        self._busy = True
+        threading.Thread(target=self._revalidate, args=(run, "onLyricNotesDone"), daemon=True).start()
+        return {"ok": True}
+
     def voice_names(self) -> list[dict]:
         from ..model.score import VOICES
 
@@ -318,6 +490,7 @@ class Api:
         if voice not in VOICES:
             return {"ok": False, "error": "Esa voz no existe."}
         run = Path(run_dir)
+        self._fresh(run)
         path = final_file(run)
         if path is None:
             return {"ok": False, "error": "Todavía no hay partitura."}
@@ -382,6 +555,7 @@ class Api:
 
         try:
             validate_run(run, self._cfg)
+            (run / PENDING).unlink(missing_ok=True)
             self._js(callback, {"run_dir": str(run), "summary": self._summary(run)})
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
@@ -441,6 +615,7 @@ class Api:
             "doubtful": info.get("doubtful_measures", []),
             "has_digital": (run / f"{title} (copia digital).musicxml").exists(),
             "has_versions": _has_versions(run),
+            "pending": (run / PENDING).exists(),
         }
 
     def _run(self, paths: list[Path], lyrics: str | None, title: str | None) -> None:

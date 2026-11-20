@@ -132,7 +132,9 @@ def apply_voices(cs: ChoralScore, data: dict) -> set[int]:
 
 # --------------------------------------------------------------------------- notes fixed by hand
 #
-#   {"edits": {"12": {"alto": {"3/2": "B-4", "2": {"pitch": "C5", "tie": true}}}}}
+#   {"edits": {"12": {"alto": {"3/2": "B-4", "2": {"pitch": "C5", "tie": true, "slur": false}}}}}
+#
+# "slur": a slur from this note to the next one (notes of different pitch sung on one syllable).
 #
 # The pitch the user gave to the note that starts at that offset (in quarter notes) of that
 # voice, and optionally whether it is tied to the next note (a tie the engines missed, or one
@@ -158,6 +160,7 @@ def apply_edits(cs: ChoralScore, data: dict) -> set[int]:
         for v, notes in (per_voice or {}).items():
             for off, value in (notes or {}).items():
                 name, tie = (value.get("pitch"), value.get("tie")) if isinstance(value, dict) else (value, None)
+                slur = value.get("slur") if isinstance(value, dict) else None
                 if not isinstance(name, str) or not _PITCH.match(name):
                     continue
                 try:
@@ -181,6 +184,12 @@ def apply_edits(cs: ChoralScore, data: dict) -> set[int]:
                     cur = nxt
                 if isinstance(tie, bool):
                     _set_tie(ms, k, v, e, tie)
+                if isinstance(slur, bool):
+                    nxt = _next_note(ms, k, v, e)
+                    if nxt is not None:
+                        nxt.slur_cont = slur
+                        if slur:
+                            nxt.lyrics = {}  # sung on this note's syllable (a melisma)
     return edited
 
 
@@ -219,3 +228,170 @@ def _set_pitch(e: Event, p) -> None:
     e.midi = int(p.midi)
     e.step = p.step
     e.alter = float(p.accidental.alter) if p.accidental else 0.0
+
+
+# --------------------------------------------------------------------------- words typed note by note
+#
+#   {"lyrics": {"12": {"1": {"0": {"text": "Sal", "dash": true}, "1": {"text": "va", "dash": true}}}}}
+#
+# For a measure and a stanza (lyric line): the syllable on each note of the voice that carries
+# the words, by onset; "dash" = a hyphen follows (the word goes on). A measure given here gets
+# exactly these syllables in that line (an empty text = no syllable: a melisma).
+
+
+def apply_lyrics(cs: ChoralScore, data: dict) -> set[int]:
+    from .score import lyric_voice
+
+    done = set()
+    by_index = {m.index: k for k, m in enumerate(cs.measures)}
+    for key, lines in (data.get("lyrics") or {}).items():
+        try:
+            k = by_index[int(key)]
+        except (KeyError, ValueError):
+            continue
+        m = cs.measures[k]
+        lead = lyric_voice(m)
+        for line, notes in (lines or {}).items():
+            try:
+                n = int(line)
+            except ValueError:
+                continue
+            for evs in m.voices.values():  # this line, in this measure, is what the user typed
+                for e in evs:
+                    e.lyrics.pop(n, None)
+            for off, val in (notes or {}).items():
+                try:
+                    offset = Fraction(off)
+                except (ValueError, ZeroDivisionError):
+                    continue
+                text = str((val or {}).get("text", "")).strip()
+                e = next((x for x in m.voices.get(lead, []) if x.offset == offset and x.is_attack), None)
+                if e is None or not text:
+                    continue
+                e.lyrics[n] = (text, "dash" if (val or {}).get("dash") else "nodash")
+            done.add(m.index)
+    if done:
+        _syllabic(cs)
+    return done
+
+
+def _syllabic(cs: ChoralScore) -> None:
+    """Turn the typed «dash / no dash» into MusicXML syllabic (begin, middle, end, single), and
+    fix the syllable that follows a typed measure (it may now start or continue a word)."""
+    from .score import lyric_voice
+
+    lines = {n for m in cs.measures for evs in m.voices.values() for e in evs for n in e.lyrics}
+    for n in lines:
+        prev_dash = False
+        for m in cs.measures:
+            for e in m.voices.get(lyric_voice(m), []):
+                if n not in e.lyrics:
+                    continue
+                text, syl = e.lyrics[n]
+                if syl in ("dash", "nodash"):
+                    dash = syl == "dash"
+                else:
+                    dash = syl in ("begin", "middle")
+                new = ("middle" if dash else "end") if prev_dash else ("begin" if dash else "single")
+                e.lyrics[n] = (text, new)
+                prev_dash = dash
+
+
+# --------------------------------------------------------------------------- rhythm fixed by hand
+#
+#   {"rhythm": {"3": {"alto": [["0", "1", "C4", null, false], ["1", "1/2", null, null, false], ...]}}}
+#
+# The whole voice in that measure as the user left it: [onset, duration, pitch (null = rest),
+# tie, slur] in quarter notes. Applied after the version chosen and before the pitch fixes.
+
+
+def apply_rhythm(cs: ChoralScore, data: dict) -> set[int]:
+    from music21 import pitch as m21pitch
+
+    from ..synthesis.refine import _move_lyrics
+
+    done = set()
+    by_index = {m.index: m for m in cs.measures}
+    for key, per_voice in (data.get("rhythm") or {}).items():
+        try:
+            m = by_index[int(key)]
+        except (KeyError, ValueError):
+            continue
+        for v, rows in (per_voice or {}).items():
+            events = []
+            try:
+                for off, dur, name, tie, slur in rows:
+                    e = Event(Fraction(off), Fraction(dur))
+                    if name:
+                        if not _PITCH.match(name):
+                            raise ValueError(name)
+                        _set_pitch(e, m21pitch.Pitch(name))
+                        e.tie = tie if tie in ("start", "stop", "continue") else None
+                        e.slur_cont = bool(slur)
+                    events.append(e)
+            except (ValueError, TypeError, ZeroDivisionError):
+                continue  # a damaged entry: keep the notes as they are
+            events.sort(key=lambda e: e.offset)
+            if not events or sum(e.duration for e in events) != m.duration and \
+                    sum(e.duration for e in events) != m.bar_length:
+                continue  # it would not fill the measure
+            m.voices[v] = _move_lyrics(m.voices.get(v, []), events)
+            done.add(m.index)
+    return done
+
+
+# --------------------------------------------------------------------------- words of one voice
+#
+#   {"voice_lyrics": {"12": {"bass": {"1": {"0": {"text": "cui", "dash": true}, ...}}}}}
+#
+# A voice that sings other words than the voice carrying them (the men answering): its own
+# syllables in that measure and stanza. The measure is marked own_words, so that every voice
+# keeps its own words when the stanzas are written out; the others still copy the melody's.
+
+
+def apply_voice_lyrics(cs: ChoralScore, data: dict) -> set[int]:
+    done = set()
+    by_index = {m.index: m for m in cs.measures}
+    touched: set[tuple[str, int]] = set()
+    for key, per_voice in (data.get("voice_lyrics") or {}).items():
+        try:
+            m = by_index[int(key)]
+        except (KeyError, ValueError):
+            continue
+        for v, lines in (per_voice or {}).items():
+            if v not in m.voices:
+                continue
+            for line, notes in (lines or {}).items():
+                try:
+                    n = int(line)
+                except ValueError:
+                    continue
+                for e in m.voices[v]:
+                    e.lyrics.pop(n, None)
+                for off, val in (notes or {}).items():
+                    try:
+                        offset = Fraction(off)
+                    except (ValueError, ZeroDivisionError):
+                        continue
+                    text = str((val or {}).get("text", "")).strip()
+                    e = next((x for x in m.voices[v] if x.offset == offset and x.is_attack), None)
+                    if e is not None and text:
+                        e.lyrics[n] = (text, "dash" if (val or {}).get("dash") else "nodash")
+                touched.add((v, n))
+            m.own_words = True
+            done.add(m.index)
+    for v, n in touched:
+        _syllabic_voice(cs, v, n)
+    return done
+
+
+def _syllabic_voice(cs: ChoralScore, v: str, n: int) -> None:
+    prev_dash = False
+    for m in cs.measures:
+        for e in m.voices.get(v, []):
+            if n not in e.lyrics:
+                continue
+            text, syl = e.lyrics[n]
+            dash = syl == "dash" if syl in ("dash", "nodash") else syl in ("begin", "middle")
+            e.lyrics[n] = (text, ("middle" if dash else "end") if prev_dash else ("begin" if dash else "single"))
+            prev_dash = dash

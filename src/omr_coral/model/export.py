@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from music21 import clef, key, metadata, meter, note, stream, tie
+from music21 import clef, key, metadata, meter, note, spanner, stream, tie
 from music21.musicxml.m21ToXml import GeneralObjectExporter
 
 from .score import VOICES, ChoralScore
@@ -20,6 +20,14 @@ def to_music21(cs: ChoralScore, cfg: dict, indices: list[int] | None = None) -> 
         part = stream.Part(id=v)
         part.partName = parts_cfg[v]["name"]
         prev_time = prev_key = None
+        slur: list = []          # the notes of the slur being drawn
+        last_note = None
+
+        def close_slur() -> None:
+            if len(slur) >= 2:
+                part.insert(0, spanner.Slur(list(slur)))
+            slur.clear()
+
         for k, m in enumerate(chosen):
             meas = stream.Measure(number=m.number)
             if k == 0:
@@ -42,10 +50,19 @@ def to_music21(cs: ChoralScore, cfg: dict, indices: list[int] | None = None) -> 
                         ly = note.Lyric(text=text, number=verse)
                         ly.syllabic = syllabic
                         n.lyrics.append(ly)
+                    # a note sung on the syllable before (inside a slur): draw the slur
+                    if e.slur_cont and last_note is not None:
+                        if not slur:
+                            slur.append(last_note)
+                        slur.append(n)
+                    elif not e.slur_cont and e.tie not in ("stop", "continue"):
+                        close_slur()
+                    last_note = n
                 meas.insert(float(e.offset), n)
             if m.pickup and k == 0:
                 meas.paddingLeft = float(m.bar_length - m.duration)
             part.append(meas)
+        close_slur()
         score.insert(0, part)
     return score
 

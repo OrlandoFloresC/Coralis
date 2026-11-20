@@ -116,3 +116,48 @@ def test_ocr_y_v_is_an_elision():
 
     assert fix_ocr_syllable("yva") == "y‿a"   # «Primer mandamiento»: «y‿a-quel»
     assert fix_ocr_syllable("ya") == "ya"
+
+
+def test_words_typed_note_by_note():
+    # «Sal-va-dor» typed with hyphens over two measures, a melisma left empty, the next word
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.corrections import apply_lyrics
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    def m(i, offs, words=None):
+        x = Measure(index=i, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4))
+        x.voices = {v: [Event(Fr(o), Fr(1), "C4", lyrics=dict(words.get(o, {})) if words else {}) for o in offs]
+                    for v in VOICES}
+        return x
+
+    ms = [m(0, [0, 1, 2, 3], {0: {1: ("Xx", "single")}}), m(1, [0, 1, 2, 3], {0: {1: ("yo", "single")}})]
+    cs = ChoralScore(Path("x"), ms, [])
+    apply_lyrics(cs, {"lyrics": {"0": {"1": {"2": {"text": "Sal", "dash": True}, "3": {"text": "va", "dash": True}}},
+                                 "1": {"1": {"0": {"text": "dor", "dash": False}, "1": {"text": "", "dash": False},
+                                             "2": {"text": "mi‿a", "dash": False}}}}})
+    sop = lambda k: [(e.offset, e.lyrics.get(1)) for e in ms[k].voices["soprano"] if e.lyrics.get(1)]
+    assert sop(0) == [(2, ("Sal", "begin")), (3, ("va", "middle"))]       # «Xx» was replaced
+    assert sop(1) == [(0, ("dor", "end")), (2, ("mi‿a", "single"))]
+    assert not any(e.lyrics for e in ms[0].voices["alto"])                   # old copies gone
+
+
+def test_a_voice_with_its_own_words():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.corrections import apply_voice_lyrics
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+    from omr_coral.model.verses import expand_verses
+
+    m = Measure(index=0, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4))
+    m.voices = {v: [Event(Fr(0), Fr(2), "C4", lyrics={1: ("Glo", "begin")}), Event(Fr(2), Fr(2), "D4", lyrics={1: ("ria", "end")})]
+                for v in VOICES}
+    cs = ChoralScore(Path("x"), [m], [])
+    apply_voice_lyrics(cs, {"voice_lyrics": {"0": {"bass": {"1": {"0": {"text": "a", "dash": True},
+                                                                   "2": {"text": "mén", "dash": False}}}}}})
+    out = expand_verses(cs)
+    sung = lambda v: [e.lyrics[1] for e in out.measures[0].voices[v] if e.lyrics]
+    assert sung("bass") == [("a", "begin"), ("mén", "end")]
+    assert sung("soprano") == [("Glo", "begin"), ("ria", "end")] and sung("tenor") == sung("soprano")

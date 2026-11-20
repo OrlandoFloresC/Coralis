@@ -165,6 +165,8 @@ def _sim(a: str | None, b: str) -> float:
 def _can_merge(a: Syl, b: Syl) -> bool:
     if not (a.word_end and b.word_start):
         return False
+    if re.search(r"[.;:!?»”)]$", a.text.strip()) or re.match(r"^[¡¿«“(]", b.text):
+        return False  # no sinalefa across the end of a sentence («Ti;‿Oh»)
     x, y = _norm(a.text), _norm(b.text)
     if y.startswith("h"):
         y = y[1:]

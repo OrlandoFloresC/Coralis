@@ -273,17 +273,35 @@ def _write_versions(run_dir: Path, voted, doubtful: list[int], cfg: dict, edits:
 
 def _events_json(events) -> list[dict]:
     return [{"offset": str(e.offset), "duration": str(e.duration), "pitch": e.pitch, "tie": e.tie,
-             "filled": e.filled} for e in events]
+             "filled": e.filled, "slur": e.slur_cont} for e in events]
 
 
 def _write_notes(run_dir: Path, voted) -> None:
     """Every measure as it stands (for «Ir al compás…» and the note editor of the window)."""
     from .model.score import VOICES
 
+    from .model.score import lyric_voice
+
+    def vwords(m, v) -> dict:
+        out: dict = {}
+        for e in m.voices.get(v, []):
+            for n, (text, syl) in sorted(e.lyrics.items()):
+                out.setdefault(str(n), []).append([str(e.offset), text, syl])
+        return out
+
+    def words(m) -> dict:
+        out: dict = {}
+        for e in m.voices.get(lyric_voice(m), []):
+            for n, (text, syl) in sorted(e.lyrics.items()):
+                out.setdefault(str(n), []).append([str(e.offset), text, syl])
+        return out
+
     out = [{"index": m.index, "label": m.label, "number": m.number, "time": list(m.time),
             "key": m.key_fifths, "pickup": m.pickup, "bar_length": str(m.bar_length),
             "duration": str(m.duration), "crop": f"report/img/m{m.index:03d}.png",
-            "voices": {v: _events_json(m.voices.get(v, [])) for v in VOICES}} for m in voted.measures]
+            "voices": {v: _events_json(m.voices.get(v, [])) for v in VOICES},
+            "words": words(m), "lyric_voice": lyric_voice(m), "own_words": m.own_words,
+            "vwords": {v: vwords(m, v) for v in VOICES}} for m in voted.measures]
     (run_dir / "notas.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
 
 
@@ -300,6 +318,7 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     fix_endings(voted)  # an ending marked "1.-6." by hand: the rest of it, and the next one is the 7th
     # notes chosen by the user: no longer "readings disagree" / "does not match the image"
     decided = corrections.apply_voices(voted, answers)
+    decided |= corrections.apply_rhythm(voted, answers)  # notes moved by hand (rhythm), after the version chosen
     decided |= corrections.apply_edits(voted, answers)  # pitches fixed by hand, after the version chosen
     vote_issues = [i for i in vote_issues if not (i.measure in decided and i.rule in ("votacion", "sintesis"))]
     if split_part_lines(voted):
@@ -315,6 +334,8 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
         vote_issues += apply_lyrics_text(voted, read_lyrics_file(lyrics_file))
     else:
         vote_issues += merge_elisions(voted)
+    corrections.apply_lyrics(voted, answers)  # words typed note by note: they have the last word
+    corrections.apply_voice_lyrics(voted, answers)  # a voice that sings other words, typed for it
     # Readings disagreed, but the image confirms the chosen version: not doubtful anymore.
     confirmed = {m.index for m in voted.measures
                  if m.synth is not None and m.synth.similarity >= cfg.get("synthesis", {}).get("confirm", 0.95)}

@@ -23,6 +23,45 @@
   html, body { margin: 0; background: var(--bg); color: var(--ink);
     font: 15px/1.5 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif; }
   main { max-width: 760px; margin: 0 auto; padding: 24px 20px 32px; }
+  body.wide main { max-width: none; }
+  .le-grid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 14px; align-items: start; }
+  .le-tools { position: sticky; top: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+              background: var(--card); }
+  .le-tools h3 { margin: 0 0 6px; font-size: 15px; }
+  .le-tools .row2 { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  .le-tools .row2 button { min-width: 34px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line);
+                           background: transparent; color: inherit; cursor: pointer; font-size: 15px; }
+  .le-tools .row2 button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .le-tools select { width: 100%; padding: 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  .le-note input.copy { color: var(--muted); font-style: italic; }
+  @media (max-width: 900px) { .le-grid { grid-template-columns: 1fr; } .le-tools { position: static; } }
+  /* a big window: use the room (a small one stays as it was) */
+  @media (min-width: 1100px) {
+    main { max-width: 1500px; padding: 24px 32px 32px; }
+    #home:not(.hidden) { display: grid; grid-template-columns: minmax(400px, 560px) minmax(0, 1fr); gap: 0 18px;
+                         align-items: start; }
+    #player:not(.hidden) { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 0 18px;
+                           align-items: start; }
+    #player .pl-main { position: sticky; top: 10px; }
+    #home .home-left { position: sticky; top: 10px; }
+    .pl-now { font-size: clamp(22px, 2.2vw, 34px); }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .nt-card img.orig { max-height: 34vh; }
+    .nt-opt svg { max-height: 18vh; }
+    #lyText { min-height: 70vh !important; font-size: 17px !important; }
+    #rvEdit, #voiceDlg { width: min(720px, 80vw); }
+    #ntEditor { width: min(1100px, 85vw) !important; max-width: none !important; }
+  }
+  @media (min-width: 1600px) {
+    ul.hist { display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); column-gap: 24px; }
+    ul.hist li:nth-child(2) { border-top: none; }
+  }
+  @media (min-width: 1100px) {
+    body.wide .le-img { max-height: 36vh; }
+    body.wide .le-staff svg { max-height: 24vh; }
+    body.wide .le-grid { grid-template-columns: minmax(0, 1fr) 300px; }
+  }
+
   header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
   .logo { width: 52px; height: 52px; flex: none; }
   h1 { font-size: 21px; margin: 0; letter-spacing: -.01em; }
@@ -141,6 +180,34 @@
   .pl-bar > div { height: 100%; width: 0; background: var(--accent); }
   .pl-now { margin-top: 10px; font-size: 22px; min-height: 30px; }
   .pl-now .cur { color: var(--accent); font-weight: 700; }
+  .le-top { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .le-top .verses button { margin-right: 4px; }
+  .le-img { display: block; max-width: 100%; max-height: 260px; margin: 12px auto 0; background: #fff;
+            border: 1px solid var(--line); border-radius: 8px; }
+  .le-voice { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin-top: 10px; }
+  .le-voice.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .le-voice > .vh { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+  .le-voice > .vh b { font-size: 15px; }
+  .le-staff { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 4px; margin-top: 10px; min-height: 80px; }
+  .le-staff svg { width: 100%; height: auto; max-height: 190px; }
+  .le-notes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .le-note { border: 1px solid var(--line); border-radius: 10px; padding: 6px; width: 104px; text-align: center; }
+  .le-note.cur { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .le-note.tied { opacity: .5; }
+  .le-note .nm { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .le-note input { width: 100%; box-sizing: border-box; text-align: center; font-size: 17px; padding: 5px 2px;
+                   border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  .le-note .dash { font-size: 12px; color: var(--accent); min-height: 15px; }
+  .le-note .ed button { min-width: 22px; padding: 1px 4px; margin: 1px; border-radius: 6px; border: 1px solid var(--line);
+                        background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+  .le-note .ed button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .le-pitch { font-size: 18px; font-weight: 600; padding: 5px 0; border-radius: 6px; border: 1px solid var(--line); outline: none; }
+  .le-pitch:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .le-note { width: 104px; cursor: pointer; }
+  .le-note select.fig { width: 100%; margin-top: 3px; font-size: 12px; border-radius: 6px; border: 1px solid var(--line);
+                        background: var(--card); color: var(--ink); }
+  .keys { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
+  .keys kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font-family: inherit; }
   .nt-card.flash { box-shadow: 0 0 0 4px var(--accent); transition: box-shadow .3s; }
   .nt-voice .vhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .nt-opt.edited { border-style: dashed; }
@@ -194,6 +261,7 @@
   </div>
 
   <div id="home">
+  <div class="home-left">
   <!-- 1. input -->
   <section class="card" id="form">
     <h2><span class="step">1</span>La partitura</h2>
@@ -226,9 +294,10 @@
 
   <!-- 3. result -->
   <section class="card result hidden" id="result"></section>
+  </div>
 
   <!-- history -->
-  <section class="card">
+  <section class="card home-right">
     <h2>Himnos convertidos <a class="link" id="openDir" style="float:right">Abrir carpeta</a></h2>
     <ul class="hist" id="hist"><li class="empty">Todavía no has convertido ninguno.</li></ul>
   </section>
@@ -259,9 +328,76 @@
   </div>
 
   <!-- review: choose among the versions of the notes the readings gave -->
+  <!-- editing the words -->
+  <div id="lyrics" class="hidden">
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Letra · <span id="lyTitle"></span></h2>
+        <span><button class="btn primary" id="lyNotes">Nota por nota</button> <button class="btn" id="lyBack">← Volver</button></span>
+      </div>
+      <p class="hint" style="margin:10px 0 0">Corrige las palabras como están en el himnario. Cada estrofa es un párrafo
+        (deja una línea en blanco entre estrofas); el número «1.» es opcional. Escribe las palabras completas: Coralis
+        las separa en sílabas y las pone en las notas, con las sinalefas («te‿a») donde hagan falta. Si una palabra se
+        separa mal, márcala con guiones: «Sal-va-dor». El coro, si se imprime una sola vez, va solo en la estrofa 1.</p>
+      <p class="hint" id="lyFrom" style="margin:6px 0 0"></p>
+      <textarea id="lyText" spellcheck="true" style="width:100%;min-height:52vh;margin-top:10px;padding:12px;font-size:16px;
+        line-height:1.5;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit"></textarea>
+    </section>
+    <div class="savebar">
+      <button class="btn" id="lyReset">Volver a la letra leída</button>
+      <span id="lyStatus" class="hint"></span>
+      <button class="btn primary" id="lySave">Guardar y rehacer</button>
+    </div>
+  </div>
+
+  <!-- the editor: words, pitches, accidentals, ties and versions, measure by measure, with the original in view -->
+  <div id="lynotes" class="hidden">
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Editar · <span id="leTitle"></span></h2>
+        <span><button class="btn" id="leText">Letra como texto</button> <button class="btn" id="leBack">← Volver</button></span>
+      </div>
+      <div class="le-top" style="margin-top:10px">
+        <span class="verses" id="leVerses"></span>
+      </div>
+      <div class="le-top" style="margin-top:8px">
+        <button class="btn" id="lePrev">◀ Anterior</button>
+        <b id="lePos">Compás 1</b>
+        <button class="btn" id="leNext">Siguiente ▶</button>
+        <label>Ir al compás <input id="leGo" style="width:64px;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit"></label>
+        <span id="leDoubt" class="pill warn hidden">compás dudoso</span>
+        <label title="Si este compás tenía las mismas notas que otros (en esta voz), corregirlos igual">
+          <input type="checkbox" id="leSame" checked> Corregir igual los compases idénticos</label>
+        <span class="hint" id="leSameInfo"></span>
+
+      </div>
+      <div class="le-grid">
+        <div><img id="leImg" class="le-img" alt="Compás del original"><div id="leBody"></div></div>
+        <aside class="le-tools" id="leTools"><p class="hint">Haz clic en una nota.</p></aside>
+      </div>
+      <div class="keys">
+        <b>Letra</b> (como en MuseScore): escribe la sílaba y pulsa <kbd>-</kbd> si la palabra sigue («Sal-va-dor»),
+        <kbd>espacio</kbd> si termina, o <kbd>_</kbd> si la sílaba se alarga sobre las notas siguientes (melisma, sin guion).
+        Sinalefa «‿»: <kbd>⌥ Opción</kbd>+<kbd>-</kbd> (o <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>-</kbd>). Una tecla sin escribir
+        nada deja la nota sin sílaba. <kbd>⌫</kbd> en vacío vuelve. <kbd>Intro</kbd> = compás siguiente.<br>
+        <b>Notas:</b> <kbd>↑</kbd> <kbd>↓</kbd> suben o bajan la nota (con la armadura); los botones ♭ ♮ ♯ ponen una
+        alteración y ⌒ la liga a la siguiente. La lista cambia la figura (en las voces sin letra también
+        <kbd>7</kbd> redonda, <kbd>6</kbd> blanca, <kbd>5</kbd> negra, <kbd>4</kbd> corchea, <kbd>3</kbd> semicorchea,
+        <kbd>.</kbd> puntillo). ◀ ▶ (o <kbd>⌥</kbd>+<kbd>←</kbd> <kbd>→</kbd>) la mueven antes o después
+        («Mover de a»): la nota o el silencio de al lado se acorta y queda un silencio donde estaba. <kbd>←</kbd> <kbd>→</kbd>
+        cambian de nota.
+      </div>
+    </section>
+    <div class="savebar">
+      <span id="leStatus" class="hint"></span>
+      <button class="btn primary" id="leSave" disabled title="Guarda tus cambios al momento (siguen ahí aunque cierres)">Guardar</button>
+      <button class="btn" id="leRebuild" title="Rehace la partitura para practicar, la copia digital y el audio con tus cambios">Rehacer partitura</button>
+    </div>
+  </div>
+
   <!-- listening: the voices with a grand piano, with a metronome -->
   <div id="player" class="hidden">
-    <section class="card">
+    <section class="card pl-main">
       <div class="row" style="justify-content:space-between">
         <h2 style="margin:0">Escuchar · <span id="plTitle"></span></h2>
         <button class="btn" id="plBack">← Volver</button>
@@ -271,7 +407,11 @@
         <button class="btn primary pl-big" id="plPlay" disabled>▶ Reproducir</button>
         <button class="btn" id="plStop" disabled>⏹ Detener</button>
         <label>Desde el compás <input type="number" id="plFrom" min="1" value="1"></label>
-        <label>Velocidad <input type="range" id="plTempo" min="30" max="200" value="80"> <b id="plTempoTxt"></b></label>
+        <label>Velocidad <b id="plTempoTxt"></b>
+          <button class="btn" type="button" id="plSlower" title="Más lento (−1)">−</button>
+          <input type="number" id="plTempo" min="20" max="240" step="1" value="80" style="width:70px"
+                 title="Escribe el número y pulsa Intro">
+          <button class="btn" type="button" id="plFaster" title="Más rápido (+1)">+</button></label>
         <label><input type="checkbox" id="plClick" checked> Metrónomo</label>
         <label><input type="checkbox" id="plCount" checked> Un compás de entrada</label>
         <button class="btn" id="plSave" disabled title="Guarda un mp3 tal como suena ahora: voces, volúmenes, velocidad y metrónomo">⬇ Descargar audio</button>
@@ -438,6 +578,7 @@ function statsLine(r) {
   return parts.join(" · ");
 }
 function doubtPill(r) {
+  if (r.pending) return `<span class="pill warn" title="Se rehace sola al abrirla, escucharla o descargarla">cambios sin rehacer</span>`;
   const n = (r.doubtful || []).length;
   return n ? `<span class="pill warn">${n} compás${n > 1 ? "es" : ""} por revisar</span>`
            : `<span class="pill ok">sin dudas</span>`;
@@ -448,6 +589,7 @@ function openBtns(r) {
             onclick='pywebview.api.open_result(${d},"score")'>Para practicar</button>
           <button class="btn primary" title="Oír las voces con piano, con metrónomo" onclick='openPlayer(${d})'>▶ Escuchar</button>
           <button class="btn" title="Guardar un MusicXML con una sola voz" onclick='chooseVoice(${d})'>⬇ Una voz</button>
+          <button class="btn" title="Corregir letra, notas, alteraciones y ligaduras compás por compás, viendo el original" onclick='openLyricNotes(${d})'>✎ Editar</button>
           ${r.has_digital ? `<button class="btn" title="2 pentagramas como el original, con repeticiones y signos"
             onclick='pywebview.api.open_result(${d},"digital")'>Copia digital</button>` : ""}
           <button class="btn" title="Marcar segno, coda, repeticiones o silencios que el programa no vio"
@@ -474,6 +616,10 @@ function onDone(r) {
 function onError(e) {
   if (rv) { $("rvStatus").textContent = "No se pudo rehacer: " + e.message; $("rvSave").disabled = false; return; }
   if (nt) { $("ntStatus").textContent = "No se pudo rehacer: " + e.message; $("ntSave").disabled = false; return; }
+  if (le) { $("leStatus").textContent = "No se pudo rehacer: " + e.message; $("leSave").disabled = false;
+            $("leRebuild").disabled = false; return; }
+  if (ly) { $("lyStatus").textContent = "No se pudo rehacer: " + e.message; $("lySave").disabled = false;
+            $("lyReset").disabled = false; return; }
   stopTimer(); setBusy(false); show("progress", false);
   $("result").innerHTML = `<h2>No se pudo convertir</h2><div class="error">${esc(e.message)}</div>`;
   show("result", true);
@@ -664,6 +810,507 @@ function pickVersion(index, v, k) {
   if (o.chosen) { delete ntChoice[index][v]; if (!Object.keys(ntChoice[index]).length) delete ntChoice[index]; }
   renderNotes();
 }
+// ---------------------------------------------------------------- editing the words
+let ly = null;
+async function openLyrics(runDir) {
+  show("home", false); show("lyrics", true);
+  $("lyTitle").textContent = "…"; $("lyStatus").textContent = ""; $("lyText").value = "Cargando la letra…";
+  const r = await pywebview.api.lyrics_text(runDir);
+  ly = {run_dir: runDir, original: r.text};
+  $("lyTitle").textContent = r.title;
+  $("lyText").value = r.text;
+  $("lyFrom").textContent = r.from_file ? "Esta es la letra que guardaste tú." :
+    "Esta es la letra que leyó el programa (con sus errores): corrígela.";
+  show("lyReset", r.from_file);
+}
+function closeLyrics() {
+  if (ly && $("lyText").value !== ly.original && !confirm("Hay cambios sin guardar. ¿Salir de todos modos?")) return;
+  ly = null; show("lyrics", false); show("home", true); loadHistory();
+}
+async function saveLyrics(reset) {
+  if (reset && !confirm("¿Volver a la letra que leyó el programa? Se borra la letra que guardaste.")) return;
+  const res = await pywebview.api.save_lyrics(ly.run_dir, reset ? null : $("lyText").value);
+  if (!res.ok) { $("lyStatus").textContent = res.error; return; }
+  $("lySave").disabled = true; $("lyReset").disabled = true;
+  $("lyStatus").textContent = "Poniendo la letra en las notas y rehaciendo la partitura…";
+}
+async function onLyricsDone(r) {
+  $("lySave").disabled = false; $("lyReset").disabled = false;
+  if (!ly) { loadHistory(); return; }
+  await openLyrics(r.run_dir);
+  $("lyStatus").textContent = "✓ Guardado. Revisa la partitura o escúchala para ver cómo quedó.";
+}
+
+// ---------------------------------------------------------------- the editor (words + notes)
+let le = null;
+const VOICE_IDS = ["soprano", "alto", "tenor", "bass"];
+async function openLyricNotes(runDir, k = 0, line = 1, voice = null) {
+  show("home", false); show("lyrics", false); show("lynotes", true);
+  $("leTitle").textContent = "…"; $("leStatus").textContent = "Cargando… (si hay cambios sin rehacer, se rehace primero)";
+  $("leSave").disabled = true;
+  const d = await pywebview.api.lyric_editor_data(runDir);
+  le = {run_dir: runDir, data: d, line, voice, k: Math.min(k, d.measures.length - 1), cur: 0,
+        lyr: {}, vlyr: {}, work: {}, choice: {}, rhythm: {}, thumbs: {}, dirty: false, step: "1/2"};
+  document.body.classList.add("wide");
+  $("leRebuild").disabled = false;
+  $("leTitle").textContent = d.title; $("leStatus").textContent = "";
+  renderTabs(); showMeasure(le.k, 0);
+}
+function curVoice(m) { return le.voice || m.voice; }
+function renderTabs() {
+  let h = "Estrofa ";
+  for (let n = 1; n <= le.data.verses; n++)
+    h += `<button class="btn ${n === le.line ? "primary" : ""}" onclick="setLine(${n})">${n}</button>`;
+  $("leVerses").innerHTML = h;
+}
+function setLine(n) { le.line = n; renderTabs(); showMeasure(le.k, 0); }
+function setVoice(v) { le.voice = v; renderTabs(); showMeasure(le.k, 0); }
+function changed() {
+  le.dirty = true;
+  $("leSave").disabled = false;
+  $("leStatus").textContent = "Cambios sin guardar";
+}
+// --- notes of a voice: the version in place (or the one picked here), with the changes made here
+function baseEvents(m, v) {
+  const pick = (le.choice[m.index] || {})[v];
+  if (pick) { const o = (m.versions[v] || []).find((x) => x.key === pick); if (o) return o.events; }
+  return m.voices[v] || [];
+}
+function eventsOf(m, v) {
+  const w = (le.work[m.index] || {})[v];
+  return w || JSON.parse(JSON.stringify(baseEvents(m, v)));
+}
+function setEvents(m, v, evs) { (le.work[m.index] = le.work[m.index] || {})[v] = evs; changed(); }
+function isTied(e) { return e.tie === "stop" || e.tie === "continue"; }
+function noSyllable(e) { return isTied(e) || !!e.slur; }   // tied or inside a slur: sung on the syllable before
+function nextNote(m, v, evs, e) {   // the note after e: later in the measure, or opening the next one
+  const sung = evs.filter((x) => x.pitch && !x.filled);
+  const i = sung.indexOf(e);
+  if (i + 1 < sung.length) return {note: sung[i + 1], here: true};
+  const k = le.data.measures.indexOf(m);
+  if (k + 1 < le.data.measures.length) {
+    const nm = le.data.measures[k + 1], ne = eventsOf(nm, v).filter((x) => !x.filled)[0];
+    if (ne && ne.pitch && ne.offset === "0") return {note: ne, here: false, m: nm};
+  }
+  return null;
+}
+function slurredNext(m, v, evs, e) {
+  if (e.slurNext !== undefined) return e.slurNext;
+  const n = nextNote(m, v, evs, e);
+  return !!(n && n.note.slur);
+}
+// --- words: the voice that carries them, and any other voice (a copy of the melody's, or its own)
+function slotsOf(m, v = m.voice) { return eventsOf(m, v).filter((e) => e.pitch && !e.filled); }
+function leadState(m) {
+  const typed = ((le.lyr[m.index] || {})[le.line]);
+  const words = Object.fromEntries((m.words[le.line] || []).map(([off, t, syl]) => [off, {t, syl}]));
+  return slotsOf(m).map((e) => {
+    if (typed) { const x = typed[e.offset] || {text: "", dash: false}; return {offset: e.offset, text: x.text, dash: x.dash}; }
+    const w = words[e.offset];
+    return {offset: e.offset, text: w ? w.t : "", dash: w ? (w.syl === "begin" || w.syl === "middle") : false};
+  });
+}
+function wordState(m, v) {
+  if (v === m.voice) return leadState(m);
+  const typed = (((le.vlyr[m.index] || {})[v]) || {})[le.line];
+  const own = m.own_words && ((m.vwords || {})[v] || {})[le.line];
+  const ownMap = own ? Object.fromEntries(own.map(([off, t, syl]) => [off, {t, syl}])) : null;
+  const lead = Object.fromEntries(leadState(m).map((x) => [x.offset, x]));
+  return slotsOf(m, v).map((e) => {
+    if (typed) { const x = typed[e.offset] || {text: "", dash: false}; return {offset: e.offset, text: x.text, dash: x.dash}; }
+    if (ownMap) { const w = ownMap[e.offset]; return {offset: e.offset, text: w ? w.t : "", dash: w ? (w.syl === "begin" || w.syl === "middle") : false}; }
+    const x = lead[e.offset];   // sings the melody's words, where it sings with it
+    return {offset: e.offset, text: x && !isTied(e) ? x.text : "", dash: x ? x.dash : false, copy: true};
+  });
+}
+function lyricState(m) { return leadState(m); }
+function setWords(m, v, st) {
+  const evs = Object.fromEntries(slotsOf(m, v).map((e) => [e.offset, e]));
+  const map = Object.fromEntries(st.map((x) => [x.offset, {text: noSyllable(evs[x.offset] || {}) ? "" : x.text.trim(), dash: x.dash}]));
+  if (v === m.voice) (le.lyr[m.index] = le.lyr[m.index] || {})[le.line] = map;
+  else (((le.vlyr[m.index] = le.vlyr[m.index] || {})[v] = le.vlyr[m.index][v] || {})[le.line] = map);
+  changed();
+}
+function setEditorLyrics(m, st) { setWords(m, m.voice, st); }
+async function showMeasure(k, cur) {
+  const ms = le.data.measures;
+  le.k = Math.max(0, Math.min(ms.length - 1, k));
+  const m = ms[le.k], v = curVoice(m);
+  $("lePos").textContent = `Compás ${m.label} de ${ms[ms.length - 1].label}`;
+  show("leDoubt", Object.keys(m.versions || {}).length > 0);
+  $("leSameInfo").textContent = "";
+  $("leBody").innerHTML = VOICE_IDS.map((vv) => voiceBlock(m, vv)).join("");
+  // where the cursor goes: the note asked for in the active voice
+  const evs = eventsOf(m, v).filter((e) => e.pitch && !e.filled), withWords = v === m.voice;
+  const free = evs.map((e, i) => (withWords && noSyllable(e)) ? -1 : i).filter((i) => i >= 0);
+  le.cur = cur === "last" ? (free[free.length - 1] ?? 0) : (free.includes(cur) ? cur : (free[0] ?? 0));
+  const el = $(`le-i-${v}-${le.cur}`);
+  if (el) { el.focus(); if (el.setSelectionRange) el.setSelectionRange(el.value.length, el.value.length); }
+  else markVoice(v);
+  renderTools();
+  leDraw();
+  if (!(m.index in le.thumbs)) le.thumbs[m.index] = await pywebview.api.measure_thumb(le.run_dir, m.index);
+  if (le && le.data.measures[le.k] === m) {
+    $("leImg").src = le.thumbs[m.index] || ""; $("leImg").style.display = le.thumbs[m.index] ? "block" : "none";
+  }
+}
+function voiceBlock(m, v) {
+  const name = le.data.voice_names[v], lead = v === m.voice;
+  const all = eventsOf(m, v), evs = all.filter((e) => e.pitch && !e.filled);
+  const words = wordState(m, v);
+  const notes = evs.length ? evs.map((e, i) => {
+    const nos = noSyllable(e), x = words[i];
+    const field = nos ? `<div class="hint">${isTied(e) ? "ligada" : "misma sílaba"}</div>`
+      : `<input id="le-i-${v}-${i}" class="${x && x.copy ? "copy" : ""}" value="${esc(x ? x.text : "")}" autocomplete="off"
+           autocapitalize="off" spellcheck="false" title="${x && x.copy ? "Canta la letra de la melodía; escribe para cambiarla solo en esta voz" : ""}"
+           onfocus="leFocus('${v}', ${i})" oninput="leInput('${v}', ${i})" onkeydown="leKey(event, ${i})">`;
+    return `<div class="le-note ${nos ? "tied" : ""}" id="le-n-${v}-${i}" onclick="leFocus('${v}', ${i})">
+      <div class="nm">${pitchEs(e.pitch)} · ${durEs(e.duration)}</div>${field}
+      <div class="dash">${x && !nos && x.text ? (x.dash ? "– sigue" :
+        (nextNote(m, v, all, e) && noSyllable(nextNote(m, v, all, e).note) ? "＿ se alarga" : "")) : ""}</div></div>`;
+  }).join("") : `<p class="hint" style="margin:4px 0">No canta en este compás.</p>`;
+  let hint = "";
+  const lines = Object.keys(m.words);
+  if (lead && le.line > 1 && lines.length === 1 && lines[0] === "1" && !((le.lyr[m.index] || {})[le.line]))
+    hint = `<p class="hint" style="margin:4px 0">Aquí solo hay letra de la estrofa 1 (un coro impreso una vez): todas las
+      estrofas la cantan. Escribe solo si esta estrofa dice otra cosa.</p>`;
+  return `<div class="le-voice ${v === curVoice(m) ? "sel" : ""}" id="le-v-${v}">
+    <div class="vh"><b>${esc(name)}</b>${lead ? `<span class="pill ok">melodía (letra principal)</span>` : ""}
+      ${Object.keys((m.versions || {})[v] || {}).length ? `<span class="pill warn">varias lecturas</span>` : ""}</div>
+    <div class="le-staff" id="leStaff-${v}"></div>${hint}
+    <div class="le-notes">${notes}</div></div>`;
+}
+function renderTools() {
+  if (!le) return;
+  const m = le.data.measures[le.k], v = curVoice(m);
+  const all = eventsOf(m, v), evs = all.filter((e) => e.pitch && !e.filled), i = le.cur, e = evs[i];
+  const name = le.data.voice_names[v];
+  const opts = (m.versions || {})[v] || [], pick = (le.choice[m.index] || {})[v];
+  const versions = opts.length ? `<h3 style="margin-top:12px">Lecturas de ${esc(name)}</h3><div class="row2">${opts.map((o, j) => {
+    const sel = pick ? pick === o.key : o.chosen;
+    return `<button class="${sel ? "on" : ""}" onclick="leVersion(${j})" title="${o.votes} de ${o.total} lecturas">${String.fromCharCode(65 + j)} ${o.votes}/${o.total}</button>`;
+  }).join("")}</div>` : "";
+  const tw = twins(m, v);
+  const same = tw.length ? `<p class="hint">${esc(name)} se repite igual en los compases ${tw.map((x) => x.label).join(", ")}.</p>` : "";
+  if (!e) { $("leTools").innerHTML = `<h3>${esc(name)}</h3><p class="hint">No canta en este compás.</p>${versions}${same}`; return; }
+  const p = parsePitch(e.pitch);
+  const joined = e.tie === "start" || e.tie === "continue" || slurredNext(m, v, all, e);
+  $("leTools").innerHTML = `
+    <h3>${esc(name)} · nota ${i + 1}</h3>
+    <div style="font-size:20px;font-weight:600">${pitchEs(e.pitch)} <span class="hint" style="font-size:13px">${durEs(e.duration)}</span></div>
+    <div class="row2"><button title="Subir (↑)" onclick="lePitch(${i}, 1)">▲</button><button title="Bajar (↓)" onclick="lePitch(${i}, -1)">▼</button>
+      <button class="${p.alter === -1 ? "on" : ""}" onclick="leAlter(${i}, -1)">♭</button><button class="${p.alter === 0 ? "on" : ""}" onclick="leAlter(${i}, 0)">♮</button><button class="${p.alter === 1 ? "on" : ""}" onclick="leAlter(${i}, 1)">♯</button></div>
+    <div class="row2"><button class="${joined ? "on" : ""}" title="Misma nota: prolongación. Otra nota: ligadura de expresión (misma sílaba)" onclick="leTie(${i})">⌒ ligar a la siguiente</button></div>
+    <label class="hint">Figura</label>
+    <select onchange="leFigure(${i}, this.value)">${FIGURES.map(([d, nm]) =>
+      `<option value="${d}" ${fcmp(fr(d), fr(e.duration)) === 0 ? "selected" : ""}>${nm}</option>`).join("")}
+      ${FIGURES.some(([d]) => fcmp(fr(d), fr(e.duration)) === 0) ? "" : `<option selected>${esc(durEs(e.duration))}</option>`}</select>
+    <div class="row2" style="margin-top:8px"><button title="Mover antes (⌥←)" onclick="leShift(${i}, -1)">◀ mover</button><button title="Mover después (⌥→)" onclick="leShift(${i}, 1)">mover ▶</button></div>
+    <label class="hint">de a <select id="leStep" style="width:auto">${[["1/4", "semicorchea"], ["1/2", "corchea"], ["1", "negra"]].map(([d, nm]) =>
+      `<option value="${d}" ${d === (le.step || "1/2") ? "selected" : ""}>${nm}</option>`).join("")}</select></label>
+    ${versions}${same}`;
+  $("leStep").onchange = (ev) => { le.step = ev.target.value; };
+}
+function markVoice(v) {
+  document.querySelectorAll(".le-voice").forEach((el) => el.classList.toggle("sel", el.id === "le-v-" + v));
+}
+let leTimer = null;
+function leDraw() {
+  clearTimeout(leTimer);
+  leTimer = setTimeout(async () => {
+    const m = le.data.measures[le.k];
+    for (const v of VOICE_IDS) {
+      let evs = eventsOf(m, v);
+      if (!evs.some((e) => e.pitch)) { const box = $("leStaff-" + v); if (box) box.style.display = "none"; continue; }
+      {
+        const st = Object.fromEntries(wordState(m, v).map((x) => [x.offset, x]));
+        let prevDash = false;
+        evs = evs.map((e) => {
+          const x = st[e.offset];
+          if (!x || noSyllable(e) || !x.text) return e;
+          const syl = prevDash ? (x.dash ? "middle" : "end") : (x.dash ? "begin" : "single");
+          prevDash = x.dash;
+          return Object.assign({}, e, {lyric: x.text, syl});
+        });
+      }
+      const svg = await pywebview.api.render_voice(le.run_dir, m.index, v, evs);
+      const box = $("leStaff-" + v);
+      if (le && le.data.measures[le.k] === m && box) box.innerHTML = svg || "";
+    }
+  }, 120);
+}
+function leFocus(v, i) {
+  le.voice = v; le.cur = i;
+  document.querySelectorAll(".le-note").forEach((el) => el.classList.remove("cur"));
+  const box = $(`le-n-${v}-${i}`); if (box) box.classList.add("cur");
+  markVoice(v); renderTools();
+}
+function leInput(v, i) {
+  const m = le.data.measures[le.k], inp = $(`le-i-${v}-${i}`);
+  // ⌥- writes a dash «–» on a Mac: it means a sinalefa here
+  if (/[–—]/.test(inp.value)) {
+    const pos = inp.selectionStart;
+    inp.value = inp.value.replace(/[–—]/g, "‿");
+    inp.setSelectionRange(pos, pos);
+  }
+  inp.classList.remove("copy");
+  const st = wordState(m, v);
+  st[i].text = inp.value;
+  setWords(m, v, st); leDraw();
+}
+// --- notes: pitch, accidental, tie
+function lePitch(i, dir) {
+  const m = le.data.measures[le.k], v = curVoice(m), evs = eventsOf(m, v);
+  const sung = evs.filter((e) => e.pitch && !e.filled), e = sung[i];
+  const x = parsePitch(e.pitch);
+  let st = STEPS.indexOf(x.step) + dir, oct = x.octave;
+  if (st > 6) { st = 0; oct++; } else if (st < 0) { st = 6; oct--; }
+  e.pitch = pitchName({step: STEPS[st], alter: keyAlter(STEPS[st], m.key), octave: oct});
+  setEvents(m, v, evs); showMeasure(le.k, i);
+}
+function leAlter(i, a) {
+  const m = le.data.measures[le.k], v = curVoice(m), evs = eventsOf(m, v);
+  const e = evs.filter((x) => x.pitch && !x.filled)[i], x = parsePitch(e.pitch);
+  e.pitch = pitchName({step: x.step, alter: a, octave: x.octave});
+  setEvents(m, v, evs); showMeasure(le.k, i);
+}
+function leTie(i) {
+  const m = le.data.measures[le.k], v = curVoice(m), evs = eventsOf(m, v);
+  const sung = evs.filter((x) => x.pitch && !x.filled), e = sung[i];
+  const n = nextNote(m, v, evs, e);
+  if (!n) { alert("No hay una nota después para ligar."); return; }
+  const tied = e.tie === "start" || e.tie === "continue";
+  if (tied) {                              // untie
+    e.tie = e.tie === "continue" ? "stop" : null;
+    if (n.here && isTied(n.note)) n.note.tie = n.note.tie === "continue" ? "start" : null;
+  } else if (slurredNext(m, v, evs, e)) {  // remove the slur
+    e.slurNext = false;
+    if (n.here) n.note.slur = false;
+  } else if (n.note.pitch === e.pitch) {   // same note: one longer sound
+    e.tie = e.tie === "stop" ? "continue" : "start";
+    if (n.here) n.note.tie = n.note.tie === "start" ? "continue" : "stop";
+  } else {                                 // another note: same syllable (melisma)
+    e.slurNext = true;
+    if (n.here) n.note.slur = true;
+  }
+  setEvents(m, v, evs); showMeasure(le.k, i);
+}
+// --- exact fractions of a quarter note («3/2», «1/4»), so that the measure always adds up
+function fr(x) { const [a, b] = String(x).split("/"); return {n: +a, d: +(b || 1)}; }
+function gcd(a, b) { return b ? gcd(b, a % b) : Math.abs(a); }
+function frn(n, d) { const g = gcd(n, d) || 1; return {n: n / g, d: d / g}; }
+function fadd(x, y) { return frn(x.n * y.d + y.n * x.d, x.d * y.d); }
+function fsub(x, y) { return frn(x.n * y.d - y.n * x.d, x.d * y.d); }
+function fcmp(x, y) { return x.n * y.d - y.n * x.d; }
+function fstr(x) { return x.d === 1 ? String(x.n) : `${x.n}/${x.d}`; }
+function rest(off, dur) { return {offset: fstr(off), duration: fstr(dur), pitch: null, tie: null, filled: false, slur: false}; }
+function keepWords(m, moved) {   // the words of the voice that carries them stay on their notes
+  if (curVoice(m) !== m.voice) return;
+  const line0 = le.line;
+  for (let n = 1; n <= le.data.verses; n++) {
+    le.line = n;
+    const st = lyricState(m);
+    if (!st.some((x) => x.text) && !((le.lyr[m.index] || {})[n])) continue;
+    const map = {};
+    for (const x of st) map[moved[x.offset] || x.offset] = {text: x.text.trim(), dash: x.dash};
+    (le.lyr[m.index] = le.lyr[m.index] || {})[n] = map;
+  }
+  le.line = line0;
+}
+function leShift(i, dir) {
+  const m = le.data.measures[le.k], v = curVoice(m);
+  const evs = eventsOf(m, v).map((e) => Object.assign({}, e, {filled: false}));
+  const note = evs.filter((x) => x.pitch)[i], at = evs.indexOf(note);
+  const step = fr(le.step || "1/2"), oldOff = note.offset;
+  const prev = evs[at - 1], next = evs[at + 1];
+  if (dir < 0) {           // earlier: take the space from what comes before, leave a silence after
+    if (!prev || fcmp(fr(prev.duration), step) < 0) { alert("No hay espacio antes de esta nota para moverla."); return; }
+    if (prev.pitch && fcmp(fr(prev.duration), step) === 0) { alert("La nota anterior desaparecería: acórtala o muévela primero."); return; }
+    prev.duration = fstr(fsub(fr(prev.duration), step));
+    note.offset = fstr(fsub(fr(note.offset), step));
+    const end = fadd(fr(note.offset), fr(note.duration));
+    if (next && !next.pitch) { next.offset = fstr(end); next.duration = fstr(fadd(fr(next.duration), step)); }
+    else evs.splice(at + 1, 0, rest(end, step));
+  } else {                 // later: take the space from what comes after, leave a silence before
+    if (!next || fcmp(fr(next.duration), step) < 0) { alert("No hay espacio después de esta nota para moverla."); return; }
+    if (next.pitch && fcmp(fr(next.duration), step) === 0) { alert("La nota siguiente desaparecería: acórtala o muévela primero."); return; }
+    next.offset = fstr(fadd(fr(next.offset), step)); next.duration = fstr(fsub(fr(next.duration), step));
+    note.offset = fstr(fadd(fr(note.offset), step));
+    if (prev && !prev.pitch) prev.duration = fstr(fadd(fr(prev.duration), step));
+    else evs.splice(at, 0, rest(fsub(fr(note.offset), step), step));
+  }
+  const out = evs.filter((e) => fcmp(fr(e.duration), {n: 0, d: 1}) > 0);
+  const moved = {[oldOff]: note.offset};
+  keepWords(m, moved);
+  (le.rhythm[m.index] = le.rhythm[m.index] || {})[v] = true;
+  setEvents(m, v, out); showMeasure(le.k, i);
+}
+const FIGURES = [["4", "redonda"], ["3", "blanca con puntillo"], ["2", "blanca"], ["3/2", "negra con puntillo"],
+                 ["1", "negra"], ["3/4", "corchea con puntillo"], ["1/2", "corchea"], ["3/8", "semicorchea con puntillo"],
+                 ["1/4", "semicorchea"], ["1/8", "fusa"]];
+function leFigure(i, dur) {
+  const m = le.data.measures[le.k], v = curVoice(m);
+  const evs = eventsOf(m, v).map((e) => Object.assign({}, e, {filled: false}));
+  const note = evs.filter((x) => x.pitch)[i], at = evs.indexOf(note);
+  const old = fr(note.duration), nw = fr(dur), end = fadd(fr(note.offset), old);
+  if (fcmp(nw, old) === 0) return;
+  if (fcmp(nw, old) < 0) {             // shorter: a silence takes the rest of its time
+    const gap = fsub(old, nw), next = evs[at + 1];
+    note.duration = fstr(nw);
+    if (next && !next.pitch) { next.offset = fstr(fsub(fr(next.offset), gap)); next.duration = fstr(fadd(fr(next.duration), gap)); }
+    else evs.splice(at + 1, 0, rest(fadd(fr(note.offset), nw), gap));
+  } else {                             // longer: it takes the silences after it, never another note
+    let need = fsub(nw, old), j = at + 1;
+    while (fcmp(need, {n: 0, d: 1}) > 0) {
+      const e = evs[j];
+      if (!e) { alert("No cabe en el compás: acorta o mueve otra nota primero."); showMeasure(le.k, i); return; }
+      const d = fr(e.duration);
+      if (e.pitch) { alert("Taparía la nota " + pitchEs(e.pitch) + ": acórtala o muévela primero."); showMeasure(le.k, i); return; }
+      if (fcmp(d, need) <= 0) { evs.splice(j, 1); need = fsub(need, d); }
+      else { e.offset = fstr(fadd(fr(e.offset), need)); e.duration = fstr(fsub(d, need)); need = {n: 0, d: 1}; }
+    }
+    note.duration = fstr(nw);
+  }
+  (le.rhythm[m.index] = le.rhythm[m.index] || {})[v] = true;
+  setEvents(m, v, evs); showMeasure(le.k, i);
+}
+function signature(evs) {   // what a voice sings in a measure: onsets, figures and notes
+  return JSON.stringify(evs.filter((e) => !e.filled || e.pitch).map((e) => [e.offset, e.duration, e.pitch || null, e.tie || null]));
+}
+function twins(m, v) {      // other measures where this voice had exactly the same notes (before any change)
+  const sig = signature(baseEvents(m, v));
+  if (!JSON.parse(sig).some((x) => x[2])) return [];
+  return le.data.measures.filter((x) => x !== m && x.time.join() === m.time.join() && x.key === m.key &&
+                                        signature(baseEvents(x, v)) === sig);
+}
+function sameInfo(m, v) {
+  const t = twins(m, v);
+  $("leSameInfo").textContent = t.length ? `(este compás se repite igual en: ${t.map((x) => x.label).join(", ")})` : "";
+}
+function leVersion(j) {
+  const m = le.data.measures[le.k], v = curVoice(m), o = m.versions[v][j];
+  (le.choice[m.index] = le.choice[m.index] || {})[v] = o.key;
+  if (le.work[m.index]) delete le.work[m.index][v];   // the notes changed by hand go with the old version
+  if (le.rhythm[m.index]) delete le.rhythm[m.index][v];
+  changed(); showMeasure(le.k, 0);
+}
+// --- moving
+function leMove(i, dir) {
+  const m = le.data.measures[le.k], v = curVoice(m), withWords = v === m.voice;
+  const evs = eventsOf(m, v).filter((e) => e.pitch && !e.filled);
+  let j = i + dir;
+  while (withWords && j >= 0 && j < evs.length && noSyllable(evs[j])) j += dir;
+  if (j >= 0 && j < evs.length) { showMeasure(le.k, j); return; }
+  if (dir > 0 && le.k + 1 < le.data.measures.length) showMeasure(le.k + 1, 0);
+  else if (dir < 0 && le.k > 0) showMeasure(le.k - 1, "last");
+}
+function leKey(ev, i) {
+  const m = le.data.measures[le.k], el = ev.target, isInput = el.tagName === "INPUT";
+  if (ev.key === "ArrowUp" || ev.key === "ArrowDown") { ev.preventDefault(); lePitch(i, ev.key === "ArrowUp" ? 1 : -1); return; }
+  if (!isInput && "34567".includes(ev.key) && ev.key.length === 1) {   // like MuseScore: 7 whole … 3 sixteenth
+    ev.preventDefault(); leFigure(i, {"7": "4", "6": "2", "5": "1", "4": "1/2", "3": "1/4"}[ev.key]); return;
+  }
+  if (!isInput && ev.key === ".") {    // dot / undot
+    ev.preventDefault();
+    const e = eventsOf(m, curVoice(m)).filter((x) => x.pitch && !x.filled)[i], d = fr(e.duration);
+    const dotted = FIGURES.find(([x, n]) => n.includes("puntillo") && fcmp(fr(x), d) === 0);
+    leFigure(i, fstr(dotted ? frn(d.n * 2, d.d * 3) : frn(d.n * 3, d.d * 2))); return;
+  }
+  if ((ev.key === "ArrowLeft" || ev.key === "ArrowRight") && ev.altKey) {
+    ev.preventDefault(); leShift(i, ev.key === "ArrowLeft" ? -1 : 1); return;
+  }
+  if (isInput && ((ev.code === "Minus" && ev.altKey) || ev.key === "‿" || ev.key === "–" || ev.key === "—")) {
+    ev.preventDefault();   // sinalefa: two syllables on this note
+    const a = el.selectionStart, b = el.selectionEnd;
+    el.value = el.value.slice(0, a) + "‿" + el.value.slice(b);
+    el.setSelectionRange(a + 1, a + 1); leInput(curVoice(m), i); return;
+  }
+  // like MuseScore: «-» the word goes on; space a new word; «_» the syllable is held over the next
+  // notes (melisma: no hyphen, the next syllable may start a new word)
+  if ((ev.key === "-" || ev.key === " " || ev.key === "_") && !ev.altKey && !ev.metaKey && !ev.ctrlKey) {
+    ev.preventDefault();
+    if (isInput) {
+      const v = curVoice(m), st = wordState(m, v);
+      if (el.value.trim() !== "" || ev.key !== "_") {
+        st[i].text = el.value; st[i].dash = ev.key === "-" && el.value.trim() !== "";
+      }
+      // passing over the melody's words in another voice, unchanged, does not make them its own
+      if (!(el.classList.contains("copy") && el.value === wordState(m, v)[i].text)) setWords(m, v, st);
+    }
+    leMove(i, 1); return;
+  }
+  if (ev.key === "Backspace" && (!isInput || el.value === "")) { ev.preventDefault(); leMove(i, -1); return; }
+  if (ev.key === "ArrowRight" && (!isInput || el.selectionStart === el.value.length)) { ev.preventDefault(); leMove(i, 1); return; }
+  if (ev.key === "ArrowLeft" && (!isInput || el.selectionStart === 0)) { ev.preventDefault(); leMove(i, -1); return; }
+  if (ev.key === "Enter") { ev.preventDefault(); if (le.k + 1 < le.data.measures.length) showMeasure(le.k + 1, 0); }
+}
+function leGoto() {
+  const v = $("leGo").value.trim().toLowerCase();
+  const k = le.data.measures.findIndex((m) => String(m.label).toLowerCase() === v);
+  if (k >= 0) showMeasure(k, 0); else $("leStatus").textContent = `No hay un compás «${v}».`;
+}
+async function saveLyricNotes(rebuild) {
+  // notes changed by hand → for each voice, the pitch (and tie) of every note, against the version in place
+  const edits = {}, rhythm = {};
+  if ($("leSame").checked) {
+    for (const [idx, per] of Object.entries(le.work)) {
+      const m = le.data.measures.find((x) => String(x.index) === idx);
+      for (const [v, evs] of Object.entries(per)) {
+        for (const t of twins(m, v)) {
+          if ((le.work[t.index] || {})[v]) continue;   // corrected there by hand: that one stays
+          (le.work[t.index] = le.work[t.index] || {})[v] = JSON.parse(JSON.stringify(evs));
+          if ((le.rhythm[idx] || {})[v]) (le.rhythm[t.index] = le.rhythm[t.index] || {})[v] = true;
+        }
+      }
+    }
+  }
+  for (const [idx, per] of Object.entries(le.work)) {
+    const m = le.data.measures.find((x) => String(x.index) === idx);
+    for (const [v, evs] of Object.entries(per)) {
+      if ((le.rhythm[idx] || {})[v]) {   // moved by hand: the whole voice of the measure, as it is now
+        (rhythm[idx] = rhythm[idx] || {})[v] = evs.map((e) => [e.offset, e.duration, e.pitch || null,
+          e.pitch ? (e.tie || null) : null, !!e.slur]);
+        continue;
+      }
+      const base = JSON.parse(JSON.stringify(baseEvents(m, v))), map = {};
+      for (const e of evs) {
+        if (!e.pitch || e.filled) continue;
+        const b = base.find((x) => x.offset === e.offset) || {};
+        const tieNow = e.tie === "start" || e.tie === "continue", tieWas = b.tie === "start" || b.tie === "continue";
+        const slurNow = slurredNext(m, v, evs, e), slurWas = b.pitch ? slurredNext(m, v, base, b) : false;
+        const val = {pitch: e.pitch};
+        if (tieNow !== tieWas) val.tie = tieNow;
+        if (slurNow !== slurWas) val.slur = slurNow;
+        map[e.offset] = Object.keys(val).length === 1 ? e.pitch : val;
+      }
+      (edits[idx] = edits[idx] || {})[v] = map;
+    }
+  }
+  const res = await pywebview.api.save_editor(le.run_dir, le.choice, edits, le.lyr, !!rebuild, rhythm, le.vlyr);
+  if (!res.ok) { $("leStatus").textContent = res.error; return; }
+  le.dirty = false; $("leSave").disabled = true;
+  if (rebuild) { $("leRebuild").disabled = true; $("leStatus").textContent = "Rehaciendo la partitura con tus cambios…"; }
+  else $("leStatus").textContent = "✓ Guardado. Cuando termines, pulsa «Rehacer partitura» (o se rehace sola al abrirla o escucharla).";
+}
+async function rebuildScore() {
+  if (le.dirty) return saveLyricNotes(true);   // save what is pending, then rebuild
+  const res = await pywebview.api.rebuild(le.run_dir);
+  if (!res.ok) { $("leStatus").textContent = res.error; return; }
+  $("leRebuild").disabled = true; $("leStatus").textContent = "Rehaciendo la partitura con tus cambios…";
+}
+async function onEditorDone(r) {
+  if (!le) { loadHistory(); return; }
+  const k = le.k, line = le.line, voice = le.voice;
+  await openLyricNotes(r.run_dir, k, line, voice);
+  $("leRebuild").disabled = false;
+  $("leStatus").textContent = "✓ Partitura rehecha con tus cambios. Puedes seguir, o escucharla en «▶ Escuchar».";
+}
+async function onLyricNotesDone(r) { return onEditorDone(r); }
+function closeLyricNotes() {
+  if (le && le.dirty && !confirm("Hay cambios sin guardar. ¿Salir de todos modos?")) return;
+  le = null; document.body.classList.remove("wide"); show("lynotes", false); show("home", true); loadHistory();
+}
+
 // ---------------------------------------------------------------- listening (piano + metronome)
 let pl = null;   // {run_dir, data, ctx, buffers, gains, ...}
 function loadPianoScript() {
@@ -721,7 +1368,20 @@ async function openPlayer(runDir) {
 }
 function tempoText() {
   const unit = pl && pl.beatQ === 1.5 ? "♩." : "♩";
-  $("plTempoTxt").textContent = `${unit} = ${$("plTempo").value}`;
+  $("plTempoTxt").textContent = `${unit} =`;
+}
+function tempoValue() {   // a sane number, whatever is typed
+  const n = Math.round(+$("plTempo").value);
+  return Math.max(20, Math.min(240, isFinite(n) && n > 0 ? n : 80));
+}
+function setTempo(n) {
+  $("plTempo").value = Math.max(20, Math.min(240, Math.round(n)));
+  tempoText();
+  // while playing: go on from the very same point at the new speed (no count-in, nothing cut)
+  if (pl && pl.playing) {
+    const q = Math.max(pl.startQ, currentQ());
+    pl.playing = false; silence(); pl.resumeQ = q; play(true);
+  }
 }
 function renderVoices() {
   $("plVoices").innerHTML = pl.data.voices.map((v) => `
@@ -752,6 +1412,8 @@ function buildGraph(ctx) {
   // the voices → their volume → the piano bus → a little room around it (a dry sample sounds synthetic)
   const g = {ctx, gains: {}, sources: []};
   g.master = ctx.createGain(); g.master.gain.value = 0.9; g.master.connect(ctx.destination);
+  // the metronome has its own volume, so it can be switched on and off while playing
+  g.clicks = ctx.createGain(); g.clicks.gain.value = $("plClick").checked ? 1 : 0; g.clicks.connect(g.master);
   const len = Math.floor(ctx.sampleRate * 1.8), ir = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const d = ir.getChannelData(ch);
@@ -775,13 +1437,13 @@ function measureAt(q) {
   while (k + 1 < ms.length && ms[k + 1].start <= q + 1e-6) k++;
   return k;
 }
-function click(g, time, strong) {
+function click(g, time, strong, countIn = false) {
   const o = g.ctx.createOscillator(), env = g.ctx.createGain();
   o.frequency.value = strong ? 1600 : 1000;
   env.gain.setValueAtTime(0.0001, time);
   env.gain.exponentialRampToValueAtTime(strong ? 0.6 : 0.35, time + 0.002);
   env.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
-  o.connect(env); env.connect(g.master);
+  o.connect(env); env.connect(countIn ? g.master : g.clicks);
   o.start(time); o.stop(time + 0.08);
   g.sources.push(o);
 }
@@ -804,13 +1466,16 @@ function schedule(g, startQ, t0, secQ, opts) {
   const k0 = measureAt(startQ), m0 = pl.data.measures[k0];
   if (opts.countIn) {
     const bi = beatInfo(m0.time);
-    for (let b = 0; b < bi.beats; b++) click(g, t0 + b * bi.q * secQ, b === 0);
+    for (let b = 0; b < bi.beats; b++) click(g, t0 + b * bi.q * secQ, b === 0, true);
     t0 += m0.length * secQ;
   }
   for (const v of pl.data.voices) {
     if (!voiceLevel(v.id) && opts.offline) continue;  // a silent voice: nothing to render
-    for (const n of v.notes)
+    for (const n of v.notes) {
       if (n.start >= startQ - 1e-6) playNote(g, v.id, n, t0 + (n.start - startQ) * secQ, secQ);
+      else if (opts.continuing && n.start + n.dur > startQ + 1e-6)   // sounding now: it goes on, for what is left
+        playNote(g, v.id, {midi: n.midi, dur: n.start + n.dur - startQ}, t0, secQ);
+    }
   }
   if (opts.clicks) {
     for (let k = k0; k < pl.data.measures.length; k++) {
@@ -823,16 +1488,16 @@ function schedule(g, startQ, t0, secQ, opts) {
   }
   return t0;
 }
-async function play() {
+async function play(continuing = false) {
   if (pl.playing) { pause(); return; }
   if (pl.ctx.state === "suspended") await pl.ctx.resume();
   const fromMeasure = Math.max(1, Math.min(pl.data.measures.length, +$("plFrom").value || 1)) - 1;
   const startQ = pl.resumeQ != null ? pl.resumeQ : pl.data.measures[fromMeasure].start;
   pl.resumeQ = null;
-  const secQ = 60 / ($("plTempo").value * pl.beatQ);
+  const secQ = 60 / (tempoValue() * pl.beatQ);
   pl.secQ = secQ;
-  pl.t0 = schedule(pl.live, startQ, pl.ctx.currentTime + 0.15, secQ,
-                   {countIn: $("plCount").checked, clicks: $("plClick").checked});
+  pl.t0 = schedule(pl.live, startQ, pl.ctx.currentTime + (continuing ? 0.03 : 0.15), secQ,
+                   {countIn: $("plCount").checked && !continuing, clicks: true, continuing});
   pl.startQ = startQ;
   pl.playing = true;
   $("plPlay").textContent = "⏸ Pausa"; $("plStop").disabled = false;
@@ -914,7 +1579,7 @@ async function downloadAudio(onlyVoice) {
     $("plSave").disabled = true;
     msg("Preparando el audio… (puede tardar un poco)");
     await loadLame();
-    const rate = 44100, secQ = 60 / ($("plTempo").value * pl.beatQ);
+    const rate = 44100, secQ = 60 / (tempoValue() * pl.beatQ);
     const countQ = $("plCount").checked ? pl.data.measures[0].length : 0;
     const seconds = (pl.totalQ + countQ) * secQ + 2.5;
     const off = new OfflineAudioContext(2, Math.ceil(seconds * rate), rate);
@@ -1181,13 +1846,29 @@ window.addEventListener("pywebviewready", async () => {
   $("ntSave").addEventListener("click", saveNotes);
   $("ntGo").addEventListener("click", gotoMeasure);
   $("plBack").addEventListener("click", closePlayer);
-  $("plPlay").addEventListener("click", play);
+  $("lyBack").addEventListener("click", closeLyrics);
+  $("lyNotes").addEventListener("click", () => { const r = ly.run_dir; ly = null; openLyricNotes(r); });
+  $("leBack").addEventListener("click", closeLyricNotes);
+  $("leText").addEventListener("click", () => { const r = le.run_dir; if (le.dirty &&
+    !confirm("Hay cambios sin guardar aquí. ¿Ir al texto de todos modos?")) return; le = null; document.body.classList.remove("wide"); show("lynotes", false); openLyrics(r); });
+  $("lePrev").addEventListener("click", () => showMeasure(le.k - 1, 0));
+  $("leNext").addEventListener("click", () => showMeasure(le.k + 1, 0));
+  $("leGo").addEventListener("keydown", (e) => { if (e.key === "Enter") leGoto(); });
+  $("leSave").addEventListener("click", () => saveLyricNotes(false));
+  $("leRebuild").addEventListener("click", rebuildScore);
+  $("lySave").addEventListener("click", () => saveLyrics(false));
+  $("lyReset").addEventListener("click", () => saveLyrics(true));
+  $("plPlay").addEventListener("click", () => play());
   $("plStop").addEventListener("click", stopPlay);
   $("plSave").addEventListener("click", () => downloadAudio(null));
   $("plBar").addEventListener("click", seekBar);
-  $("plTempo").addEventListener("input", () => {
-    tempoText();
-    if (pl && pl.playing) { const q = currentQ(); pl.playing = false; silence(); pl.resumeQ = q; play(); }
+  // the tempo changes when the number is confirmed (Enter, or leaving the box), not at every keystroke
+  $("plTempo").addEventListener("change", () => setTempo(tempoValue()));
+  $("plTempo").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("plTempo").blur(); } });
+  $("plSlower").addEventListener("click", () => setTempo(tempoValue() - 1));
+  $("plFaster").addEventListener("click", () => setTempo(tempoValue() + 1));
+  $("plClick").addEventListener("change", () => {
+    if (pl && pl.live) pl.live.clicks.gain.setTargetAtTime($("plClick").checked ? 1 : 0, pl.ctx.currentTime, 0.01);
   });
   $("plFrom").addEventListener("change", () => { if (pl) { pl.resumeQ = null; if (!pl.playing) {
     $("plPlay").textContent = "▶ Reproducir"; showPos(pl.data.measures[Math.max(0, $("plFrom").value - 1)].start); } } });

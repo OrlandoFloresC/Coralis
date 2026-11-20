@@ -114,3 +114,42 @@ def test_tie_added_and_removed_by_hand():
     assert ms[0].voices["tenor"][0].tie is None      # C4 → D4: not the same sound, no tie
     apply_edits(cs, {"edits": {"0": {"tenor": {"2": {"pitch": "D4", "tie": False}}}}})
     assert ms[0].voices["tenor"][1].tie is None and ms[1].voices["tenor"][0].tie is None
+
+
+def test_slur_added_by_hand_is_a_melisma_and_is_exported():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.config import load_config
+    from omr_coral.model.corrections import apply_edits
+    from omr_coral.model.export import to_music21
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    m = Measure(index=0, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4))
+    m.voices = {v: [Event(Fr(0), Fr(2), "C4", lyrics={1: ("A", "single")}),
+                    Event(Fr(2), Fr(2), "D4", lyrics={1: ("mén", "single")})] for v in VOICES}
+    cs = ChoralScore(Path("x"), [m], [])
+    apply_edits(cs, {"edits": {"0": {"soprano": {"0": {"pitch": "C4", "slur": True}}}}})
+    assert m.voices["soprano"][1].slur_cont and m.voices["soprano"][1].lyrics == {}
+    score = to_music21(cs, load_config(None))
+    slurs = [s for s in score.parts[0].spanners if s.classes[0] == "Slur"]
+    assert len(slurs) == 1 and len(slurs[0].getSpannedElements()) == 2
+
+
+def test_notes_moved_by_hand():
+    # «the notes are right but not where they should be»: the user moves them; the measure must still add up
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.corrections import apply_rhythm
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    m = Measure(index=3, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4))
+    m.voices = {v: [Event(Fr(0), Fr(2), "C4", lyrics={1: ("A", "single")}), Event(Fr(2), Fr(2), "D4")] for v in VOICES}
+    cs = ChoralScore(Path("x"), [m], [])
+    rows = [["0", "1", None, None, False], ["1", "2", "C4", None, False], ["3", "1", "D4", None, False]]
+    assert apply_rhythm(cs, {"rhythm": {"3": {"alto": rows, "bass": rows[:2]}}}) == {3}
+    alto = m.voices["alto"]
+    assert [(e.offset, e.duration, e.pitch) for e in alto] == [(0, 1, None), (1, 2, "C4"), (3, 1, "D4")]
+    assert alto[1].lyrics == {1: ("A", "single")}      # the syllable goes with its note
+    assert m.voices["bass"][0].pitch == "C4"            # 3 beats only: not applied

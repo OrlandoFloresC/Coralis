@@ -40,7 +40,7 @@ def render_measures_svg(cs: ChoralScore, cfg: dict, indices: list[int]) -> str:
 
 def render_voice_svg(m, voice: str, events, cfg: dict) -> str:
     """One voice of one measure on its own staff (one version of it, for the review)."""
-    from music21 import clef, key, meter, note, stream, tie
+    from music21 import clef, key, meter, note, spanner, stream, tie
 
     from ..model.export import CLEFS
 
@@ -49,13 +49,34 @@ def render_voice_svg(m, voice: str, events, cfg: dict) -> str:
     meas.insert(0, CLEFS.get(cfg["output"]["parts"][voice]["clef"], clef.TrebleClef)())
     meas.insert(0, key.KeySignature(m.key_fifths))
     meas.insert(0, meter.TimeSignature(f"{m.time[0]}/{m.time[1]}"))
+    slur, prev = [], None   # the slurs (a syllable sung over several notes), as printed
+
+    def close_slur() -> None:
+        if len(slur) >= 2:
+            part.insert(0, spanner.Slur(list(slur)))
+        slur.clear()
+
     for e in events:
         if e.duration <= 0:
             continue
         n = note.Rest(quarterLength=e.duration) if e.is_rest else note.Note(e.pitch, quarterLength=e.duration)
+        if not e.is_rest:
+            if e.slur_cont and prev is not None:
+                if not slur:
+                    slur.append(prev)
+                slur.append(n)
+            elif not e.slur_cont and e.tie not in ("stop", "continue"):
+                close_slur()
+            prev = n
         if e.tie and not e.is_rest:
             n.tie = tie.Tie(e.tie)
+        if not e.is_rest and e.lyrics:  # the words being typed, under their notes
+            text, syl = next(iter(e.lyrics.values()))
+            n.lyric = text
+            if n.lyrics:
+                n.lyrics[0].syllabic = syl
         meas.insert(float(e.offset), n)
+    close_slur()
     if m.pickup:
         meas.paddingLeft = float(m.bar_length - m.duration)
     part.append(meas)
