@@ -35,6 +35,7 @@ from .voting.vote import Candidate, _fix_endings as fix_endings, vote
 
 RESULT_STEM = "resultado"
 LYRICS_FILE = "letra.txt"
+NAMES_FILE = "voces.json"  # the names the user gave the voices of this hymn («Primer tenor»…)
 TITLE_FILE = "titulo.txt"  # name chosen by the user (overrides the title read from the image)
 
 
@@ -305,7 +306,31 @@ def _write_notes(run_dir: Path, voted) -> None:
     (run_dir / "notas.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
 
 
+def voice_names(run_dir: Path, cfg: dict) -> dict:
+    """{voice: name} for this hymn: the configured names, or the ones the user gave it."""
+    names = {v: p["name"] for v, p in cfg["output"]["parts"].items()}
+    f = run_dir / NAMES_FILE
+    if f.exists():
+        try:
+            mine = json.loads(f.read_text(encoding="utf-8"))
+            names.update({v: str(n).strip() for v, n in mine.items() if v in names and str(n).strip()})
+        except (OSError, ValueError):
+            pass
+    return names
+
+
+def cfg_for(run_dir: Path, cfg: dict) -> dict:
+    """The configuration with this hymn's voice names (the parts of every file it writes)."""
+    import copy
+
+    out = copy.deepcopy(cfg)
+    for v, n in voice_names(run_dir, cfg).items():
+        out["output"]["parts"][v]["name"] = n
+    return out
+
+
 def validate_run(run_dir: Path, cfg: dict) -> dict:
+    cfg = cfg_for(run_dir, cfg)
     cands = load_candidates(run_dir, cfg)
     if not cands:
         raise FileNotFoundError(f"No hay lecturas en {run_dir / 'engines'}")

@@ -153,3 +153,42 @@ def test_notes_moved_by_hand():
     assert [(e.offset, e.duration, e.pitch) for e in alto] == [(0, 1, None), (1, 2, "C4"), (3, 1, "D4")]
     assert alto[1].lyrics == {1: ("A", "single")}      # the syllable goes with its note
     assert m.voices["bass"][0].pitch == "C4"            # 3 beats only: not applied
+
+
+def test_upbeat_gets_shorter_when_a_silence_is_taken_out():
+    # «El camino es escabroso»: the alto was read with an extra eighth, the upbeat came out 3 eighths;
+    # the user takes the silence out and the upbeat is 2 eighths again
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.corrections import apply_rhythm
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    m = Measure(index=0, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(3, 2), pickup=True)
+    m.voices = {v: [Event(Fr(0), Fr(1, 2), "F3"), Event(Fr(1, 2), Fr(1, 2), "G-3"), Event(Fr(1), Fr(1, 2), filled=True)]
+                for v in VOICES}
+    m.voices["alto"] = [Event(Fr(0), Fr(1, 2)), Event(Fr(1, 2), Fr(1, 2), "F3"), Event(Fr(1), Fr(1, 2), "G-3")]
+    cs = ChoralScore(Path("x"), [m], [])
+    apply_rhythm(cs, {"rhythm": {"0": {"alto": [["0", "1/2", "F3", None, False], ["1/2", "1/2", "G-3", None, False]]}}})
+    assert m.duration == 1
+    assert [(e.offset, e.pitch) for e in m.voices["alto"]] == [(0, "F3"), (Fr(1, 2), "G-3")]
+    assert sum(e.duration for e in m.voices["soprano"]) == 1
+
+
+def test_upbeat_silence_in_front_of_some_voices_goes():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.corrections import apply_rhythm, apply_voice_lyrics
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    m = Measure(index=0, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(3, 2), pickup=True)
+    m.voices = {v: [Event(Fr(0), Fr(1, 2), "F3"), Event(Fr(1, 2), Fr(1, 2), "G-3"), Event(Fr(1), Fr(1, 2), filled=True)]
+                for v in VOICES}
+    cs = ChoralScore(Path("x"), [m], [])
+    data = {"rhythm": {"0": {"alto": [["0", "1/2", None, None, False], ["1/2", "1/2", "F3", None, False], ["1", "1/2", "G-3", None, False]]}},
+            "voice_lyrics": {"0": {"alto": {"1": {"1/2": {"text": "El", "dash": False}, "1": {"text": "ca", "dash": True}}}}}}
+    apply_rhythm(cs, data)
+    apply_voice_lyrics(cs, data)
+    assert m.duration == 1
+    assert [(e.offset, e.pitch, e.lyrics.get(1, ("",))[0]) for e in m.voices["alto"]] == [(0, "F3", "El"), (Fr(1, 2), "G-3", "ca")]

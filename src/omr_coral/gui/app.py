@@ -271,7 +271,7 @@ class Api:
         meta = next((m for m in all_ if str(m["label"]).lower() == str(label).strip().lower()), None)
         if meta is None:
             return {"ok": False, "error": f"No hay un compás «{label}» (van del {all_[0]['label']} al {all_[-1]['label']})."}
-        names = self._cfg["output"]["parts"]
+        names = {v: {"name": n} for v, n in self._names(run).items()}
         voices = {}
         for v, evs in meta["voices"].items():
             if not any(e.get("pitch") for e in evs):
@@ -297,7 +297,7 @@ class Api:
         if path is None:
             return {"ok": False, "error": "Todavía no hay partitura para escuchar."}
         cs = build_choral_score(path)
-        names = self._cfg["output"]["parts"]
+        names = {v: {"name": n} for v, n in self._names(run).items()}
         measures, voices = [], {v: [] for v in VOICES}
         words = {v: [] for v in VOICES}
         t = 0.0
@@ -411,9 +411,8 @@ class Api:
                           "vwords": m.get("vwords", {}), "own_words": m.get("own_words", False),
                           "versions": {v: o for v, o in versions.get(m["index"], {}).items() if len(o) > 1}})
         lines = max([int(n) for m in measures for n in m.get("words", {})] + [1])
-        names = self._cfg["output"]["parts"]
         return {"title": self._summary(run)["title"], "measures": out, "verses": lines,
-                "voice_names": {v: names[v]["name"] for v in names}}
+                "voice_names": self._names(run), "doubtful": self._doubtful_indices(run)}
 
     def measure_thumb(self, run_dir: str, index: int) -> str | None:
         crop = Path(run_dir) / "report" / "img" / f"m{int(index):03d}.png"
@@ -484,10 +483,45 @@ class Api:
         threading.Thread(target=self._revalidate, args=(run, "onLyricNotesDone"), daemon=True).start()
         return {"ok": True}
 
-    def voice_names(self) -> list[dict]:
+    def _names(self, run: Path) -> dict:
+        from ..pipeline import voice_names
+
+        return voice_names(run, self._cfg)
+
+    def _cfg_for(self, run: Path) -> dict:
+        from ..pipeline import cfg_for
+
+        return cfg_for(run, self._cfg)
+
+    def _doubtful_indices(self, run: Path) -> list[int]:
+        """The measures still doubtful (by index), to jump from one to the next in the editor."""
+        try:
+            info = json.loads((run / "validation.json").read_text(encoding="utf-8"))
+            labels = {str(x) for x in info.get("doubtful_measures", [])}
+            notes = json.loads((run / "notas.json").read_text(encoding="utf-8"))
+            return [m["index"] for m in notes if str(m["label"]) in labels]
+        except (OSError, ValueError):
+            return []
+
+    def voice_names(self, run_dir: str | None = None) -> list[dict]:
         from ..model.score import VOICES
 
-        return [{"id": v, "name": self._cfg["output"]["parts"][v]["name"]} for v in VOICES]
+        names = self._names(Path(run_dir)) if run_dir else {v: p["name"] for v, p in self._cfg["output"]["parts"].items()}
+        return [{"id": v, "name": names[v]} for v in VOICES]
+
+    def set_voice_names(self, run_dir: str, names: dict) -> dict:
+        """Rename the voices of this hymn; every file and screen uses the new names."""
+        from ..pipeline import NAMES_FILE
+
+        run = Path(run_dir)
+        default = {v: p["name"] for v, p in self._cfg["output"]["parts"].items()}
+        clean = {v: str(n).strip() for v, n in (names or {}).items() if v in default and str(n).strip()}
+        if all(clean.get(v, default[v]) == default[v] for v in default):
+            (run / NAMES_FILE).unlink(missing_ok=True)
+        else:
+            (run / NAMES_FILE).write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run / PENDING).write_text("Nombres de las voces cambiados; falta rehacer la partitura.\n", encoding="utf-8")
+        return {"ok": True, "names": self._names(run)}
 
     def export_voice(self, run_dir: str, voice: str) -> dict:
         """A MusicXML with one voice only (with its words, every stanza), where the user says."""
@@ -502,21 +536,49 @@ class Api:
         path = final_file(run)
         if path is None:
             return {"ok": False, "error": "Todavía no hay partitura."}
-        name = self._cfg["output"]["parts"][voice]["name"]
-        default = f"{path.stem} - {name}.musicxml"
-        res = self._window.create_file_dialog(webview.FileDialog.SAVE, directory=str(run.parent),
-                                              save_filename=default, file_types=("MusicXML (*.musicxml)",))
-        if not res:
-            return {"ok": False}
-        dest = Path(res if isinstance(res, str) else res[0])
-        if dest.suffix.lower() not in (".musicxml", ".xml"):
-            dest = dest.with_suffix(".musicxml")
-        score = to_music21(build_choral_score(path), self._cfg)
+        name = self._names(run)[voice]
+        dest = _free_name(run, f"{path.stem} - {name}", "musicxml")
+        score = to_music21(build_choral_score(path), self._cfg_for(run))
         for part in list(score.parts):
             if part.id != voice:
                 score.remove(part)
         score.write("musicxml", fp=str(dest))
-        return {"ok": True, "path": str(dest)}
+        return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
+
+    def video_staves(self, run_dir: str, voice: str) -> list:
+        """Each measure of the file for practice, one voice, drawn on its own staff (for the video)."""
+        from ..model.score import VOICES, build_choral_score
+        from ..output.render import render_voice_svg
+        from ..pipeline import final_file
+
+        if voice not in VOICES:
+            return []
+        run = Path(run_dir)
+        self._fresh(run)
+        path = final_file(run)
+        if path is None:
+            return []
+        out = []
+        for m in build_choral_score(path).measures:
+            evs = [e for e in m.voices.get(voice, []) if e.duration > 0]
+            for e in evs:
+                e.lyrics = {}   # the words are shown big, apart
+            if not any(not e.is_rest for e in evs):
+                out.append(None)
+                continue
+            try:
+                svg = render_voice_svg(m, voice, evs, self._cfg)
+            except Exception:  # noqa: BLE001  (a measure that cannot be drawn: no staff there)
+                out.append(None)
+                continue
+            # where each note head is drawn (in the units of the drawing), to light the one that sounds
+            out.append({"svg": svg, "heads": _note_heads(svg),
+                        "notes": [[float(e.offset), float(e.duration)] for e in evs if not e.is_rest]})
+        return out
+
+    def choose_folder(self) -> str | None:
+        res = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=str(work_dir()))
+        return (res if isinstance(res, str) else res[0]) if res else None
 
     def video_begin(self, run_dir: str) -> str:
         """Start receiving a video, piece by piece. Returns a token (the temporary file)."""
@@ -541,26 +603,17 @@ class Api:
             f.write(data)
         return True
 
-    def video_end(self, token: str, run_dir: str, name: str, ext: str) -> dict:
-        """The video is complete: ask where to keep it."""
-        import re
+    def video_end(self, token: str, run_dir: str, name: str, ext: str, folder: str | None = None) -> dict:
+        """The video is complete: ask where to keep it (or put it in the folder chosen for several)."""
         import shutil
 
         if token not in getattr(self, "_videos", set()):
             return {"ok": False, "error": "No se encontró el video."}
         self._videos.discard(token)
         ext = ext if ext in ("mp4", "webm") else "mp4"
-        safe = re.sub(r'[\\/:*?"<>|]+', " ", name).strip() or "video"
-        res = self._window.create_file_dialog(webview.FileDialog.SAVE, directory=str(Path(run_dir).parent),
-                                              save_filename=f"{safe}.{ext}", file_types=(f"Video (*.{ext})",))
-        if not res:
-            Path(token).unlink(missing_ok=True)
-            return {"ok": False, "error": "No se guardó (cancelado)."}
-        dest = Path(res if isinstance(res, str) else res[0])
-        if dest.suffix.lower() != f".{ext}":
-            dest = dest.with_suffix(f".{ext}")
+        dest = _free_name(Path(folder) if folder and Path(folder).is_dir() else Path(run_dir), name, ext)
         shutil.move(token, dest)
-        return {"ok": True, "path": str(dest)}
+        return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
 
     def video_cancel(self, token: str) -> None:
         if token in getattr(self, "_videos", set()):
@@ -568,20 +621,12 @@ class Api:
             Path(token).unlink(missing_ok=True)
 
     def save_audio(self, run_dir: str, name: str, data_b64: str) -> dict:
-        """Save the mp3 the window rendered, where the user says."""
+        """Save the mp3 the window rendered, in the hymn's folder."""
         import base64
-        import re
 
-        safe = re.sub(r'[\\/:*?"<>|]+', " ", name).strip() or "audio.mp3"
-        res = self._window.create_file_dialog(webview.FileDialog.SAVE, directory=str(Path(run_dir).parent),
-                                              save_filename=safe, file_types=("Audio MP3 (*.mp3)",))
-        if not res:
-            return {"ok": False, "error": "No se guardó (cancelado)."}
-        dest = Path(res if isinstance(res, str) else res[0])
-        if dest.suffix.lower() != ".mp3":
-            dest = dest.with_suffix(".mp3")
+        dest = _free_name(Path(run_dir), name.rsplit(".", 1)[0], "mp3")
         dest.write_bytes(base64.b64decode(data_b64))
-        return {"ok": True, "path": str(dest)}
+        return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
 
     def save_notes(self, run_dir: str, choices: dict, edits: dict | None = None) -> dict:
         from ..model import corrections
@@ -714,6 +759,32 @@ def _has_versions(run: Path) -> bool:
         return bool(json.loads((run / "versiones.json").read_text(encoding="utf-8")))
     except (OSError, ValueError):
         return False
+
+
+def _free_name(folder: Path, name: str, ext: str) -> Path:
+    """A file name in this folder that does not write over another one."""
+    safe = re.sub(r'[\\/:*?"<>|]+', " ", name).strip() or "archivo"
+    dest = folder / f"{safe}.{ext}"
+    n = 2
+    while dest.exists():
+        dest = folder / f"{safe} ({n}).{ext}"
+        n += 1
+    return dest
+
+
+def _note_heads(svg: str) -> list[list[float]]:
+    """Centre of each note head of a Verovio drawing, in the units of its outer viewBox, in order."""
+    outer = re.search(r'<svg[^>]*viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    inner = re.search(r'class="definition-scale"[^>]*viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    margin = re.search(r'class="page-margin" transform="translate\(([\d.-]+), ([\d.-]+)\)"', svg)
+    if not (outer and inner):
+        return []
+    k = float(outer.group(1)) / float(inner.group(1))
+    mx, my = (float(margin.group(1)), float(margin.group(2))) if margin else (0.0, 0.0)
+    heads = []
+    for note in re.finditer(r'class="note"[\s\S]*?class="notehead"[\s\S]*?translate\(([\d.-]+), ([\d.-]+)\)', svg):
+        heads.append([(float(note.group(1)) + mx + 150) * k, (float(note.group(2)) + my) * k])  # +150: half a head
+    return heads
 
 
 def _thumb(path: Path, width: int = 320) -> str | None:

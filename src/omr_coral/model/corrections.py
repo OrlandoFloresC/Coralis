@@ -332,12 +332,84 @@ def apply_rhythm(cs: ChoralScore, data: dict) -> set[int]:
             except (ValueError, TypeError, ZeroDivisionError):
                 continue  # a damaged entry: keep the notes as they are
             events.sort(key=lambda e: e.offset)
-            if not events or sum(e.duration for e in events) != m.duration and \
-                    sum(e.duration for e in events) != m.bar_length:
-                continue  # it would not fill the measure
+            total = sum(e.duration for e in events)
+            # a measure must stay full; an upbeat (pickup) may get shorter: its length is what is sung
+            if not events or (total != m.duration and total != m.bar_length and not (m.pickup and 0 < total < m.duration)):
+                continue
             m.voices[v] = _move_lyrics(m.voices.get(v, []), events)
             done.add(m.index)
+        if m.pickup and m.index in done:
+            for v, d in _fit_pickup(m).items():
+                _shift_words(data, m.index, v, d, lead=v == _lead(m))
     return done
+
+
+def _lead(m) -> str:
+    from .score import lyric_voice
+
+    return lyric_voice(m)
+
+
+def _shift_words(data: dict, index: int, v: str, d: Fraction, lead: bool) -> None:
+    """Words typed for notes that moved earlier by d: they follow their notes (in memory only)."""
+    def moved(notes: dict) -> dict:
+        out = {}
+        for off, val in notes.items():
+            try:
+                out[str(Fraction(off) - d)] = val
+            except (ValueError, ZeroDivisionError):
+                out[off] = val
+        return out
+
+    own = ((data.get("voice_lyrics") or {}).get(str(index)) or {}).get(v)
+    if own:
+        for line in list(own):
+            own[line] = moved(own[line])
+    if lead:
+        typed = (data.get("lyrics") or {}).get(str(index))
+        for line in list(typed or {}):
+            typed[line] = moved(typed[line])
+
+
+def _fit_pickup(m) -> dict:
+    """The upbeat: every voice ends at the barline. A silence in front of some voices that makes
+    them end later than the others is not printed («El camino es escabroso»: an alto misread with
+    an extra eighth, the note deleted, a silence left in front): it goes, when that makes them all
+    end together. Then the upbeat lasts what is sung. Returns {voice: how much it moved earlier}."""
+    def end(evs):
+        return max((e.end for e in evs if not e.filled and not e.is_rest), default=Fraction(0))
+
+    def lead_rest(evs):
+        r = Fraction(0)
+        for e in evs:
+            if not e.is_rest:
+                break
+            r += e.duration
+        return r
+
+    singing = {v: evs for v, evs in m.voices.items() if any(not e.is_rest for e in evs)}
+    shifts = {}
+    if singing:
+        trimmed = {v: end(evs) - lead_rest(evs) for v, evs in singing.items()}
+        if len(set(trimmed.values())) == 1 and len({end(evs) for evs in singing.values()}) > 1:
+            for v, evs in singing.items():
+                d = lead_rest(evs)
+                if d:
+                    kept = [e for e in evs if e.offset >= d]
+                    for e in kept:
+                        e.offset -= d
+                    m.voices[v] = kept
+                    shifts[v] = d
+    ends = [max((e.end for e in evs if not e.filled), default=Fraction(0)) for evs in m.voices.values()
+            if any(not e.is_rest for e in evs)]
+    if not ends:
+        return shifts
+    m.duration = max(ends)
+    for v, evs in m.voices.items():
+        m.voices[v] = [e for e in evs if e.offset < m.duration]
+        if m.voices[v] and m.voices[v][-1].end > m.duration:
+            m.voices[v][-1].duration = m.duration - m.voices[v][-1].offset
+    return shifts
 
 
 # --------------------------------------------------------------------------- words of one voice
