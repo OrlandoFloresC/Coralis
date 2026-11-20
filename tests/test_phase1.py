@@ -192,3 +192,102 @@ def test_upbeat_silence_in_front_of_some_voices_goes():
     apply_voice_lyrics(cs, data)
     assert m.duration == 1
     assert [(e.offset, e.pitch, e.lyrics.get(1, ("",))[0]) for e in m.voices["alto"]] == [(0, "F3", "El"), (Fr(1, 2), "G-3", "ca")]
+
+
+def test_transpose_to_the_simplest_key():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+    from omr_coral.model.transpose import key_after, shift_label, transpose_score
+
+    assert key_after(1, 1) == -4     # G + ½ tone = A♭ (not G♯)
+    assert key_after(0, 6) == -6     # C + 6 = G♭
+    assert key_after(-6, 1) == 1     # G♭ + ½ tone = G
+    m = Measure(index=0, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4), key_fifths=-6)
+    m.voices = {v: [Event(Fr(0), Fr(2), "G-4", 66), Event(Fr(2), Fr(2))] for v in VOICES}
+    m.voices["bass"] = [Event(Fr(0), Fr(4), "C-3", 47, tie="start")]   # a printed accidental of the key
+    cs = transpose_score(ChoralScore(Path("x"), [m], []), 1)
+    assert m.key_fifths == 1
+    assert (m.voices["soprano"][0].pitch, m.voices["soprano"][0].midi) == ("G4", 67)
+    assert m.voices["soprano"][1].pitch is None              # rests stay rests
+    assert (m.voices["bass"][0].pitch, m.voices["bass"][0].midi, m.voices["bass"][0].tie) == ("C3", 48, "start")
+    transpose_score(cs, -3)
+    assert m.key_fifths == 4 and m.voices["soprano"][0].pitch == "E4"   # G − 3 semitones = E major (4 ♯)
+    assert shift_label(2) == " (2 semitonos más alto)" and shift_label(-1) == " (1 semitono más bajo)" and shift_label(0) == ""
+
+
+def test_pdf_from_page_pictures(tmp_path):
+    import base64
+    import io
+
+    import pypdfium2 as pdfium
+
+    from omr_coral.gui.app import Api
+
+    buf = io.BytesIO()
+    Image.new("RGB", (248, 351), "white").save(buf, "JPEG")
+    api = Api.__new__(Api)
+    tok = api.pdf_begin(str(tmp_path))
+    for _ in range(3):
+        assert api.pdf_page(tok, base64.b64encode(buf.getvalue()).decode())
+    r = api.pdf_end(tok, str(tmp_path), "Himno - 4 voces")
+    assert r["ok"] and r["path"].endswith("Himno - 4 voces.pdf")
+    pdf = pdfium.PdfDocument(r["path"])
+    assert len(pdf) == 3 and round(pdf[0].get_size()[0]) == 595   # A4
+    assert not Path(tok).exists()                                    # the pictures are gone
+    assert not api.pdf_page(tok, "")                                 # and the token too
+
+
+def _bars(n, time=(4, 4), key=0):
+    from fractions import Fraction as Fr
+
+    from omr_coral.model.score import VOICES, Event, Measure
+
+    out = []
+    for k in range(n):
+        m = Measure(index=k, system=1, page=None, staves=[], time=time, key_fifths=key,
+                    bar_length=Fr(4 * time[0], time[1]), duration=Fr(4 * time[0], time[1]))
+        m.voices = {v: [Event(Fr(0), m.bar_length, "B-4", 70)] for v in VOICES}
+        m.number = k + 1
+        out.append(m)
+    return out
+
+
+def test_measures_added_and_removed_by_hand_keep_the_corrections_on_their_measures():
+    from pathlib import Path
+
+    from omr_coral.model.score import ChoralScore
+    from omr_coral.model.structure import apply_structure, rekey
+
+    data = {"edits": {"2": {"soprano": {"0": "C5"}}, "5": {"alto": {"0": "D4"}}}, "marks": {"1": {"segno": True}}}
+    op = {"op": "insert", "at": 2}
+    rekey(data, op)
+    assert set(data["edits"]) == {"3", "6"} and set(data["marks"]) == {"1"}
+    op2 = {"op": "delete", "at": 6}
+    rekey(data, op2)
+    assert set(data["edits"]) == {"3"}
+    data["structure"] = [op, op2]
+    cs = ChoralScore(Path("x"), _bars(6), [])
+    first_ids = [id(m) for m in cs.measures]
+    where = apply_structure(cs, data)
+    assert len(cs.measures) == 6 and [m.index for m in cs.measures] == list(range(6))
+    assert all(e.pitch is None for evs in cs.measures[2].voices.values() for e in evs)   # the new one: rests
+    assert where == {0: 0, 1: 1, 2: 3, 3: 4, 4: 5}                                       # vote 5 was deleted
+    assert id(cs.measures[3]) == first_ids[2] and cs.measures[3].number == 4
+
+
+def test_signatures_given_by_hand():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.score import ChoralScore
+    from omr_coral.model.structure import apply_signatures
+
+    ms = _bars(3, time=(2, 4), key=-1) + _bars(2, time=(3, 4), key=-1)
+    cs = ChoralScore(Path("x"), ms, [])
+    apply_signatures(cs, {"signatures": {"0": {"time": [4, 4], "scope": "run"}, "1": {"key": 0, "scope": "one"}}})
+    assert [m.time for m in ms] == [(4, 4), (4, 4), (4, 4), (3, 4), (3, 4)]   # only the 2/4 stretch
+    assert ms[0].bar_length == 4 and ms[0].voices["soprano"][-1].filled          # filled up to the new length
+    assert ms[1].key_fifths == 0 and ms[1].voices["soprano"][0].pitch == "B4"    # B♭ of F major → B♮ in C
+    assert ms[2].key_fifths == -1 and ms[2].voices["soprano"][0].pitch == "B-4"  # "one": only that measure

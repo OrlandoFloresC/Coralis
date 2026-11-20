@@ -54,12 +54,24 @@ jobs:
           path: ${{ env.DMG }}
           retention-days: 14
 
+      # what is new in this version (its section of NOVEDADES.md), then the Mac notes below
+      - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          awk -v v="## $V" '/^## /{p = (index($0, v) == 1)} p' NOVEDADES.md > notas.md
+          printf '\n' >> notas.md
+          sed -n '/^ *body: |$/,$p' .github/workflows/mac.yml | sed '1d; s/^            //' >> notas.md
+          cat notas.md
+
       - name: Publish in Releases
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.DMG }}
           append_body: true
+          body_path: notas.md
           body: |
             **Importante:** Coralis puede equivocarse (notas, ritmos, letra, repeticiones o estrofas). El reporte
             marca los compases dudosos. Compara siempre el resultado con la partitura impresa: la decisión final

@@ -67,6 +67,10 @@ def write_report(cs: ChoralScore, issues: list[Issue], cfg: dict, run_dir: Path,
     report_dir = run_dir / "report"
     img_dir = report_dir / "img"
     img_dir.mkdir(parents=True, exist_ok=True)
+    # drawn again every time: a measure added or removed by hand shifts the numbers, and a measure
+    # with no image (added by hand) must not show the one that had its number before
+    for old in list(img_dir.glob("m*.png")) + list(img_dir.glob("v*.png")):
+        old.unlink(missing_ok=True)
 
     by_measure: dict[int, list[Issue]] = defaultdict(list)
     for i in issues:

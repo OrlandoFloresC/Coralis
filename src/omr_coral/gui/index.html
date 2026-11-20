@@ -45,6 +45,12 @@
     #player:not(.hidden) { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 0 18px;
                            align-items: start; }
     #player .pl-main { position: sticky; top: 10px; }
+    /* with the score: controls and voices on the left, the score (its own scroll) on the right */
+    #player.with-score:not(.hidden) { grid-template-columns: minmax(380px, 0.85fr) minmax(0, 1.4fr); }
+    #player.with-score .pl-main { position: static; grid-column: 1; }
+    #player.with-score .pl-voicecard { grid-column: 1; }
+    #player.with-score #plScoreCard { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: 10px; }
+    #player.with-score #plScoreView { max-height: calc(100vh - 110px); }
     #home .home-left { position: sticky; top: 10px; }
     .pl-now { font-size: clamp(22px, 2.2vw, 34px); }
     .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
@@ -181,6 +187,17 @@
   .pl-bar { height: 10px; background: var(--line); border-radius: 6px; overflow: hidden; margin-top: 14px; cursor: pointer; }
   .pl-bar > div { height: 100%; width: 0; background: var(--accent); }
   .pl-now { margin-top: 10px; font-size: 22px; min-height: 30px; }
+  #plScoreView { max-height: 65vh; overflow: auto; background: #fff; border-radius: 10px; border: 1px solid var(--line);
+                 margin-top: 10px; }
+  svg .note { color: inherit; background: none; }   /* Verovio's notes are not the «.note» boxes */
+  #plScoreView .sv-page { position: relative; border-bottom: 1px solid #ddd; }
+  #plScoreView .sv-page:last-child { border-bottom: none; }
+  #plScoreView svg { display: block; width: 100%; height: auto; color: #111; }
+  #plScoreView g.measure { cursor: pointer; }
+  /* the note that sounds: its head, stem and dot, and its syllable, in green */
+  #plScoreView g.note.on { fill: #1f8a5b; color: #1f8a5b; }
+  #plScoreView g.note.on .syl, #plScoreView g.note.on .verse { fill: #1f8a5b; font-weight: bold; }
+  #plScoreView rect.sv-cur { fill: #1f8a5b; fill-opacity: .13; }
   .pl-now .cur { color: var(--accent); font-weight: 700; }
   .le-top { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
   .le-top .verses button { margin-right: 4px; }
@@ -423,8 +440,22 @@
           <button class="btn" type="button" id="plFaster" title="Más rápido (+1)">+</button></label>
         <label><input type="checkbox" id="plClick" checked> Metrónomo</label>
         <label><input type="checkbox" id="plCount" checked> Un compás de entrada</label>
-        <button class="btn" id="plSave" disabled title="Guarda un mp3 tal como suena ahora: voces, volúmenes, velocidad y metrónomo">⬇ Descargar audio</button>
+      </div>
+      <div class="pl-controls">
+        <label title="Sube o baja todo el himno: el sonido, el audio, el video, la partitura y el MIDI que guardes">Tono
+          <button class="btn" type="button" id="plDown" title="Medio tono más bajo">−</button>
+          <b id="plKeyTxt" style="min-width:150px;display:inline-block;text-align:center">original</b>
+          <button class="btn" type="button" id="plUp" title="Medio tono más alto">+</button></label>
+        <label title="Repite ese tramo sin parar, para ensayarlo"><input type="checkbox" id="plLoop"> Repetir del compás
+          <input type="number" id="plLoopA" min="1" value="1"> al <input type="number" id="plLoopB" min="1" value="4"></label>
+      </div>
+      <div class="pl-controls">
+        <button class="btn" id="plSave" disabled title="Guarda un mp3 tal como suena ahora: voces, volúmenes, lados, tono, velocidad y metrónomo">⬇ Descargar audio</button>
         <button class="btn" id="plVideo" disabled title="Graba un video con la letra (tipo karaoke) y el sonido como suena ahora">🎬 Crear video</button>
+        <button class="btn" id="plMidi" disabled title="Guarda un MIDI (una pista por voz) con este tono y esta velocidad. Con «Sola», solo esa voz">⬇ MIDI</button>
+        <button class="btn" id="plScore" disabled title="Guarda la partitura (MusicXML) en este tono. Con «Sola», solo esa voz">⬇ Partitura en este tono</button>
+        <button class="btn" id="plPdf" disabled title="Guarda la partitura en PDF (hojas A4, para imprimir) en este tono. Con «Sola», solo esa voz">⬇ PDF</button>
+        <label title="Muestra la partitura completa y marca el compás y las notas que suenan"><input type="checkbox" id="plShowScore" checked> Ver la partitura</label>
       </div>
       <div class="pl-bar" id="plBar" title="Haz clic para ir a ese punto"><div></div></div>
       <div class="row" style="justify-content:space-between;margin-top:6px">
@@ -438,11 +469,22 @@
         </div>
       </div>
     </section>
-    <section class="card">
+    <section class="card hidden" id="plScoreCard">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Partitura</h2>
+        <span class="hint" id="plScoreMsg">Haz clic en un compás para ir ahí.</span>
+      </div>
+      <div id="plScoreView"></div>
+    </section>
+    <section class="card pl-voicecard">
       <h2 style="margin:0 0 4px">Voces</h2>
       <p class="hint" style="margin:0">«Destacar» deja tu voz fuerte y las demás suaves; «Sola» se oye solo esa voz.
         La letra de arriba es la de la voz destacada. «⬇ Descargar audio» (arriba) guarda un mp3 tal como suena:
-        las 4 voces, tu voz destacada o una voz sola.</p>
+        las 4 voces, tu voz destacada o una voz sola. Con audífonos, «Lado» pone cada voz a la izquierda o a la derecha.</p>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button class="btn" type="button" id="plSplit" title="La voz destacada a la izquierda y las demás a la derecha (con audífonos)">🎧 Mi voz a la izquierda, las demás a la derecha</button>
+        <button class="btn" type="button" id="plCenter">Todas al centro</button>
+      </div>
       <div class="pl-voices" id="plVoices"></div>
       <p class="hint" style="margin:12px 0 0;font-size:12px">Sonido de piano: Salamander Grand Piano de Alexander Holm
         (Creative Commons Attribution 3.0), versión de Tone.js. Audio mp3 con lamejs (LGPL 3.0).</p>
@@ -1052,6 +1094,105 @@ function voiceBlock(m, v) {
 }
 function renderTools() {
   if (!le) return;
+  renderNoteTools();
+  $("leTools").insertAdjacentHTML("beforeend", measureTools());
+}
+const TIMES = ["2/4", "3/4", "4/4", "5/4", "6/4", "2/2", "3/2", "3/8", "6/8", "9/8", "12/8"];
+function keyName(f) {
+  const maj = ["Do♭", "Sol♭", "Re♭", "La♭", "Mi♭", "Si♭", "Fa", "Do", "Sol", "Re", "La", "Mi", "Si", "Fa♯", "Do♯"][f + 7];
+  return f === 0 ? `sin alteraciones (${maj} mayor)` : `${Math.abs(f)}${f > 0 ? "♯" : "♭"} (${maj} mayor)`;
+}
+function measureTools() {
+  const m = le.data.measures[le.k], v = curVoice(m), ops = le.data.structure || [];
+  const last = ops[ops.length - 1];
+  const time = m.time.join("/"), sig = (le.data.signatures || {})[String(m.index)];
+  const times = TIMES.includes(time) ? TIMES : [time, ...TIMES];
+  const clip = le.clip ? `<button onclick="lePaste(null)" title="Pone aquí las 4 voces del compás ${esc(le.clip.label)}">📋 Pegar las 4 voces (c. ${esc(le.clip.label)})</button>
+      <button onclick="lePaste('${v}')">📋 Pegar solo ${esc(le.data.voice_names[v])}</button>` : "";
+  return `<details class="le-mtools" ${le.mtOpen ? "open" : ""} ontoggle="le.mtOpen = this.open" style="margin-top:14px;border-top:1px solid var(--line);padding-top:8px">
+    <summary style="cursor:pointer"><b>Compás ${esc(m.label)}</b> <span class="hint">agregar, borrar, cifra, armadura, copiar</span></summary>
+    <div class="row2"><button onclick="leMeasureOp('insert', 0)" title="Un compás de silencios antes de este">＋ Compás antes</button>
+      <button onclick="leMeasureOp('insert', 1)" title="Un compás de silencios después de este">＋ Compás después</button></div>
+    <div class="row2"><button onclick="leMeasureOp('delete', 0)" title="Quita este compás de la partitura (se puede deshacer)">🗑 Borrar este compás</button></div>
+    ${last ? `<div class="row2"><button onclick="leMeasureUndo()" title="Deshace el último compás agregado o borrado">↶ Deshacer: ${last.op === "insert" ? "compás agregado" : "compás borrado"}</button></div>` : ""}
+    <p class="hint" style="margin:2px 0 8px">Agregar o borrar un compás rehace la partitura (unos segundos); tus otras correcciones siguen en sus compases.</p>
+    <label class="hint">Cifra de compás</label>
+    <select id="leTime">${times.map((t) => `<option ${t === time ? "selected" : ""}>${t}</option>`).join("")}</select>
+    <label class="hint">Armadura</label>
+    <select id="leKeySel">${Array.from({length: 15}, (_, j) => j - 7).map((f) =>
+      `<option value="${f}" ${f === m.key ? "selected" : ""}>${keyName(f)}</option>`).join("")}</select>
+    <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" id="leSigOne"> solo este compás</label>
+    <div class="row2"><button onclick="leSignature()">Aplicar cifra y armadura</button>
+      ${sig ? `<button onclick="leSignatureReset()" title="Quita tu cambio: vuelve a lo que leyó el programa">Volver a lo leído</button>` : ""}</div>
+    <p class="hint" style="margin:2px 0 8px">Sin «solo este compás», el cambio va desde aquí hasta donde el programa leyó otra cifra o armadura.
+      Con otra armadura, las notas sin alteración propia se ajustan a ella.</p>
+    <div class="row2"><button onclick="leCopy()" title="Copia las notas de las 4 voces de este compás">⧉ Copiar este compás</button>${clip}</div>
+  </details>`;
+}
+async function leMeasureOp(op, after) {
+  const m = le.data.measures[le.k];
+  if (op === "delete" && !confirm(`¿Borrar el compás ${m.label}? Sus notas y su letra se quitan de la partitura (se puede deshacer).`)) return;
+  if (le.dirty) await saveLyricNotes(false);   // first what was changed here, on the measures as they are now
+  const at = le.k + (op === "insert" && after ? 1 : 0);
+  $("leStatus").textContent = op === "insert" ? "Agregando el compás y rehaciendo la partitura…" : "Borrando el compás y rehaciendo la partitura…";
+  const r = await pywebview.api.measure_op(le.run_dir, op, at);
+  if (!r || !r.ok) { $("leStatus").textContent = (r && r.error) || "No se pudo."; return; }
+  le.k = op === "insert" ? at : Math.min(le.k, le.data.measures.length - 2);   // where the editor opens again
+  $("leRebuild").disabled = true;
+}
+async function leMeasureUndo() {
+  if (le.dirty) await saveLyricNotes(false);
+  $("leStatus").textContent = "Deshaciendo el último cambio de compases…";
+  const r = await pywebview.api.measure_undo(le.run_dir);
+  if (!r || !r.ok) { $("leStatus").textContent = (r && r.error) || "No se pudo."; return; }
+  $("leRebuild").disabled = true;
+}
+async function leSignature() {
+  const m = le.data.measures[le.k];
+  const t = $("leTime").value, f = +$("leKeySel").value;
+  const time = t !== m.time.join("/") ? t.split("/").map(Number) : null, key = f !== m.key ? f : null;
+  if (!time && key == null) { $("leStatus").textContent = "La cifra y la armadura ya son esas."; return; }
+  if (le.dirty) await saveLyricNotes(false);
+  $("leStatus").textContent = "Cambiando y rehaciendo la partitura…";
+  const r = await pywebview.api.set_signature(le.run_dir, m.index, time, key, $("leSigOne").checked ? "one" : "run");
+  if (!r || !r.ok) { $("leStatus").textContent = (r && r.error) || "No se pudo."; return; }
+  $("leRebuild").disabled = true;
+}
+async function leSignatureReset() {
+  const m = le.data.measures[le.k];
+  if (le.dirty) await saveLyricNotes(false);
+  $("leStatus").textContent = "Volviendo a lo leído y rehaciendo la partitura…";
+  const r = await pywebview.api.set_signature(le.run_dir, m.index, null, null, "run");
+  if (!r || !r.ok) { $("leStatus").textContent = (r && r.error) || "No se pudo."; return; }
+  $("leRebuild").disabled = true;
+}
+function voiceLength(evs) { return evs.reduce((a, e) => fadd(a, fr(e.duration)), {n: 0, d: 1}); }
+function leCopy() {
+  const m = le.data.measures[le.k];
+  le.clip = {label: m.label, voices: Object.fromEntries(VOICE_IDS.map((v) => [v, JSON.parse(JSON.stringify(eventsOf(m, v)))]))};
+  $("leStatus").textContent = `Compás ${m.label} copiado. Ve a otro compás y pulsa «Pegar».`;
+  le.mtOpen = true; renderTools();
+}
+function lePaste(only) {
+  const m = le.data.measures[le.k];
+  if (!le.clip) return;
+  const voices = only ? [only] : VOICE_IDS;
+  for (const v of voices) {
+    if (fcmp(voiceLength(le.clip.voices[v]), voiceLength(eventsOf(m, v))) !== 0) {
+      alert(`No cabe: el compás ${le.clip.label} dura distinto que este (${durEs(fstr(voiceLength(le.clip.voices[v])))} contra ${durEs(fstr(voiceLength(eventsOf(m, v))))}).`);
+      return;
+    }
+  }
+  pushUndo();
+  for (const v of voices) {
+    const evs = JSON.parse(JSON.stringify(le.clip.voices[v])).map((e) => Object.assign(e, {filled: false}));
+    (le.rhythm[m.index] = le.rhythm[m.index] || {})[v] = true;
+    setEvents(m, v, evs);
+  }
+  $("leStatus").textContent = `Pegado el compás ${le.clip.label}${only ? " (" + le.data.voice_names[only] + ")" : ""}. Cambios sin guardar.`;
+  showMeasure(le.k, 0);
+}
+function renderNoteTools() {
   const m = le.data.measures[le.k], v = curVoice(m);
   const all = eventsOf(m, v), evs = all.filter((e) => e.pitch && !e.filled), i = le.cur, e = evs[i];
   const name = le.data.voice_names[v];
@@ -1095,8 +1236,9 @@ function renderTools() {
       ${FIGURES.some(([d]) => fcmp(fr(d), fr(e.duration)) === 0) ? "" : `<option selected>${esc(durEs(e.duration))}</option>`}</select>
     <div class="row2" style="margin-top:8px"><button title="Mover antes (⌥←)" onclick="leShift(${i}, -1)">◀ mover</button><button title="Mover después (⌥→)" onclick="leShift(${i}, 1)">mover ▶</button></div>
     <div class="row2"><button title="Convertir en silencio (⌘⌫)" onclick="leDelete(${i})">🗑 Borrar nota</button>
-      <button title="Partir en dos notas iguales" onclick="leSplit(${i})">✂ Dividir</button></div>
-    <label class="hint">de a <select id="leStep" style="width:auto">${[["1/4", "semicorchea"], ["1/2", "corchea"], ["1", "negra"]].map(([d, nm]) =>
+      <button title="Partir en dos notas iguales" onclick="leSplit(${i})">✂ Dividir</button>
+      <button title="Partir en tres notas iguales: un tresillo (una negra → tres corcheas de tresillo)" onclick="leSplit(${i}, 3)">③ Tresillo</button></div>
+    <label class="hint">de a <select id="leStep" style="width:auto">${[["1/4", "semicorchea"], ["1/3", "corchea de tresillo"], ["1/2", "corchea"], ["1", "negra"]].map(([d, nm]) =>
       `<option value="${d}" ${d === (le.step || "1/2") ? "selected" : ""}>${nm}</option>`).join("")}</select></label>
     ${versions}${same}`;
   $("leStep").onchange = (ev) => { le.step = ev.target.value; };
@@ -1241,8 +1383,9 @@ function leShift(i, dir) {
   setEvents(m, v, out); showMeasure(le.k, i);
 }
 const FIGURES = [["4", "redonda"], ["3", "blanca con puntillo"], ["2", "blanca"], ["3/2", "negra con puntillo"],
-                 ["1", "negra"], ["3/4", "corchea con puntillo"], ["1/2", "corchea"], ["3/8", "semicorchea con puntillo"],
-                 ["1/4", "semicorchea"], ["1/8", "fusa"]];
+                 ["4/3", "blanca de tresillo"], ["1", "negra"], ["3/4", "corchea con puntillo"], ["2/3", "negra de tresillo"],
+                 ["1/2", "corchea"], ["3/8", "semicorchea con puntillo"], ["1/3", "corchea de tresillo"],
+                 ["1/4", "semicorchea"], ["1/6", "semicorchea de tresillo"], ["1/8", "fusa"]];
 function leFigure(i, dur) {
   const m = le.data.measures[le.k], v = curVoice(m);
   const evs = eventsOf(m, v).map((e) => Object.assign({}, e, {filled: false}));
@@ -1393,18 +1536,21 @@ function leRemoveRest(j) {
 function dropWord(m, off) {   // the syllable of a deleted note goes too
   for (const line of Object.keys(le.lyr[m.index] || {})) { if (le.lyr[m.index][line][off]) le.lyr[m.index][line][off].text = ""; }
 }
-function leSplit(i) {
+function leSplit(i, parts = 2) {   // 2: two equal notes; 3: a triplet (a quarter → three triplet eighths)
   const m = le.data.measures[le.k], v = curVoice(m);
   const evs = eventsOf(m, v).map((e) => Object.assign({}, e, {filled: false}));
   const note = evs.filter((e) => e.pitch)[i], at = evs.indexOf(note);
-  const half = frn(fr(note.duration).n, fr(note.duration).d * 2);
-  if (fcmp(half, fr("1/16")) < 0) { alert("La nota ya es muy corta para dividirla."); return; }
+  const piece = frn(fr(note.duration).n, fr(note.duration).d * parts);
+  if (fcmp(piece, fr("1/16")) < 0) { alert("La nota ya es muy corta para dividirla."); return; }
   pushUndo();
-  const second = {offset: fstr(fadd(fr(note.offset), half)), duration: fstr(half), pitch: note.pitch,
-                  tie: note.tie === "start" || note.tie === "continue" ? "start" : null, filled: false, slur: false};
-  note.duration = fstr(half);
+  const tiedOut = note.tie === "start" || note.tie === "continue";
+  const more = [];
+  for (let n = 1; n < parts; n++)
+    more.push({offset: fstr(fadd(fr(note.offset), frn(piece.n * n, piece.d))), duration: fstr(piece), pitch: note.pitch,
+               tie: n === parts - 1 && tiedOut ? "start" : null, filled: false, slur: false});
+  note.duration = fstr(piece);
   if (note.tie === "start") note.tie = null; else if (note.tie === "continue") note.tie = "stop";
-  evs.splice(at + 1, 0, second);
+  evs.splice(at + 1, 0, ...more);
   (le.rhythm[m.index] = le.rhythm[m.index] || {})[v] = true;
   setEvents(m, v, evs); showMeasure(le.k, i);
 }
@@ -1543,8 +1689,9 @@ async function rebuildScore() {
 }
 async function onEditorDone(r) {
   if (!le) { loadHistory(); return; }
-  const k = le.k, line = le.line, voice = le.voice;
+  const k = le.k, line = le.line, voice = le.voice, clip = le.clip, mtOpen = le.mtOpen;
   await openLyricNotes(r.run_dir, k, line, voice);
+  if (le) { le.clip = clip; le.mtOpen = mtOpen; renderTools(); }
   $("leRebuild").disabled = false;
   $("leStatus").textContent = "✓ Partitura rehecha con tus cambios. Puedes seguir, o escucharla en «▶ Escuchar».";
 }
@@ -1585,26 +1732,23 @@ async function openPlayer(runDir) {
   pl.beatQ = b.q;
   $("plTempo").value = Math.round(data.tempo || (b.q === 1.5 ? 60 : 80));  // a printed ♩= mark, if read
   tempoText();
-  pl.vol = {}; pl.solo = null; pl.hl = null;
-  data.voices.forEach((v) => { pl.vol[v.id] = 0.8; });
+  pl.vol = {}; pl.pan = {}; pl.solo = null; pl.hl = null; pl.shift = 0;
+  data.voices.forEach((v) => { pl.vol[v.id] = 0.8; pl.pan[v.id] = 0; });
+  $("plLoopA").max = $("plLoopB").max = data.measures.length;
+  $("plLoopA").value = 1; $("plLoopB").value = Math.min(4, data.measures.length); $("plLoop").checked = false;
+  keyText();
   renderVoices();
   try {
     await loadPianoScript();
     pl.ctx = pl.ctx || new (window.AudioContext || window.webkitAudioContext)();
-    const needed = new Set();
-    data.voices.forEach((v) => v.notes.forEach((n) => needed.add(n.midi)));
     pl.buffers = {};
-    const avail = Object.keys(window.CORALIS_PIANO).map(Number);
-    await Promise.all([...needed].map(async (midi) => {
-      const near = avail.reduce((a, x) => Math.abs(x - midi) < Math.abs(a - midi) ? x : a, avail[0]);
-      const res = await fetch(window.CORALIS_PIANO[near]);
-      const buf = await pl.ctx.decodeAudioData(await res.arrayBuffer());
-      pl.buffers[midi] = {buf, rate: Math.pow(2, (midi - near) / 12)};
-    }));
+    await ensureBuffers();
     pl.live = buildGraph(pl.ctx);
     applyGains();
     $("plLoad").textContent = "Listo. Elige la velocidad y pulsa Reproducir.";
     $("plPlay").disabled = false; $("plSave").disabled = false; $("plVideo").disabled = false;
+    $("plMidi").disabled = false; $("plScore").disabled = false; $("plPdf").disabled = false;
+    loadScoreView();
   } catch (e) {
     $("plLoad").textContent = "No se pudo preparar el sonido: " + (e && e.message ? e.message : e);
   }
@@ -1626,12 +1770,172 @@ function setTempo(n) {
     pl.playing = false; silence(); pl.resumeQ = q; play(true);
   }
 }
+async function ensureBuffers() {
+  // the piano recordings every note needs, at the current tone (a recording every minor third, retuned)
+  const needed = new Set();
+  pl.data.voices.forEach((v) => v.notes.forEach((n) => needed.add(n.midi + pl.shift)));
+  const avail = Object.keys(window.CORALIS_PIANO).map(Number);
+  await Promise.all([...needed].filter((m) => !pl.buffers[m]).map(async (midi) => {
+    const near = avail.reduce((a, x) => Math.abs(x - midi) < Math.abs(a - midi) ? x : a, avail[0]);
+    const res = await fetch(window.CORALIS_PIANO[near]);
+    const buf = await pl.ctx.decodeAudioData(await res.arrayBuffer());
+    pl.buffers[midi] = {buf, rate: Math.pow(2, (midi - near) / 12)};
+  }));
+}
+function keyAfter(fifths, semis) {   // the same choice as the saved files: at most 6 sharps or flats
+  const x = (((fifths + 7 * semis) % 12) + 12) % 12;
+  return x >= 6 ? x - 12 : x;
+}
+function shiftLabel(s) {   // for file names, as Coralis names them: « (2 semitonos más alto)»
+  if (!s) return "";
+  const n = Math.abs(s);
+  return ` (${n} semitono${n > 1 ? "s" : ""} más ${s > 0 ? "alto" : "bajo"})`;
+}
+function keyText() {
+  const s = pl ? pl.shift : 0;
+  if (!s) { $("plKeyTxt").textContent = "original"; return; }
+  const k = keyAfter(pl.data.key || 0, s);
+  const sig = k === 0 ? "sin alteraciones" : `${Math.abs(k)}${k > 0 ? "♯" : "♭"}`;
+  const words = {1: "medio tono", 2: "un tono"}[Math.abs(s)] || `${Math.abs(s)} semitonos`;
+  $("plKeyTxt").textContent = `${s > 0 ? "+" : "−"}${Math.abs(s)} · ${words} ${s > 0 ? "más alto" : "más bajo"} · ${sig}`;
+  $("plKeyTxt").title = `Armadura: ${sig}`;
+}
+async function setShift(s) {
+  if (!pl || !pl.buffers || vid) return;
+  s = Math.max(-12, Math.min(12, s));
+  if (s === pl.shift) return;
+  const was = pl.playing, q = was ? Math.max(pl.startQ, currentQ()) : null;
+  if (was) { pl.playing = false; silence(); }
+  pl.shift = s; keyText();
+  $("plLoad").textContent = "Afinando el piano…";
+  await ensureBuffers();
+  $("plLoad").textContent = "";
+  if (was) { pl.resumeQ = q; play(true); }
+  if (sv) loadScoreView();   // the score in the new tone
+}
+// ---------------------------------------------------------------- the whole score while it plays
+let sv = null;   // {meas: [g.measure], index: Map(id → k), ev: [{Q, on, off}], i, q, k, rect}
+async function loadScoreView() {
+  const on = $("plShowScore").checked;
+  try { localStorage.setItem("coralis.showScore", on ? "1" : "0"); } catch (e) { /* only a convenience */ }
+  show("plScoreCard", on && !!pl); $("player").classList.toggle("with-score", on && !!pl);
+  if (!on || !pl) { sv = null; $("plScoreView").innerHTML = ""; return; }
+  const token = {}; pl.scoreToken = token;
+  $("plScoreMsg").textContent = "Dibujando la partitura…";
+  const r = await pywebview.api.score_pages(pl.run_dir, null, pl.shift);
+  if (pl.scoreToken !== token) return;   // something newer was asked meanwhile
+  if (!r || !r.ok) { $("plScoreMsg").textContent = (r && r.error) || "No se pudo dibujar la partitura."; return; }
+  const box = $("plScoreView");
+  box.innerHTML = r.pages.map((p) => `<div class="sv-page">${p}</div>`).join("");
+  const meas = [...box.querySelectorAll("g.measure")];
+  const ms = pl.data.measures;
+  const ev = r.events.filter((e) => e[0] < ms.length)
+    .map((e) => ({Q: ms[e[0]].start + e[1], on: e[2], off: e[3]})).sort((a, b) => a.Q - b.Q);
+  sv = {meas, index: new Map(meas.map((g, k) => [g.id, k])), ev, i: 0, q: -1, k: -1, rect: null};
+  $("plScoreMsg").textContent = "Haz clic en un compás para ir ahí.";
+  scoreAt(pl.playing ? currentQ() : ms[Math.max(0, (+$("plFrom").value || 1) - 1)].start);
+}
+function scoreClearNotes() {
+  for (const el of $("plScoreView").querySelectorAll(".on")) el.classList.remove("on");
+  if (sv) { sv.i = 0; sv.q = -1; }
+}
+function scoreAt(q) {
+  if (!sv) return;
+  if (pl.playing) {
+    if (q < sv.q - 1e-6) scoreClearNotes();   // went back (a repeat, a jump): start over
+    while (sv.i < sv.ev.length && sv.ev[sv.i].Q <= q + 1e-6) {
+      const e = sv.ev[sv.i++];
+      for (const id of e.off) { const el = document.getElementById(id); if (el) el.classList.remove("on"); }
+      for (const id of e.on) { const el = document.getElementById(id); if (el) el.classList.add("on"); }
+    }
+    sv.q = q;
+  } else if (sv.q >= 0) scoreClearNotes();
+  const k = measureAt(Math.max(0, q));
+  if (k !== sv.k) { sv.k = k; markMeasure(k); }
+}
+function markMeasure(k) {
+  const g = sv.meas[k];
+  if (!g) return;
+  let bb;
+  try { bb = g.getBBox(); } catch (e) { return; }
+  if (!sv.rect) sv.rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  sv.rect.setAttribute("class", "sv-cur");
+  const pad = 60;
+  sv.rect.setAttribute("x", bb.x - pad / 2); sv.rect.setAttribute("y", bb.y - pad);
+  sv.rect.setAttribute("width", bb.width + pad); sv.rect.setAttribute("height", bb.height + 2 * pad);
+  g.parentNode.insertBefore(sv.rect, g);
+  // keep it in sight: when it leaves the view, bring it near the top
+  const box = $("plScoreView"), r = g.getBoundingClientRect(), c = box.getBoundingClientRect();
+  if (r.top < c.top + 10 || r.bottom > c.bottom - 10)
+    box.scrollTo({top: box.scrollTop + (r.top - c.top) - c.height * 0.12, behavior: "smooth"});
+}
+function goToMeasure(k) {   // from the bar or a click on the score
+  $("plFrom").value = k + 1;
+  const was = pl.playing;
+  if (was) { pl.playing = false; silence(); }
+  pl.resumeQ = null;
+  if (!was) $("plPlay").textContent = "▶ Reproducir";
+  showPos(pl.data.measures[k].start);
+  if (was) play();
+}
+async function svgPageJpeg(svg) {   // an A4 page drawn at 300 dpi
+  const W = 2480, H = 3508;
+  const s = svg.replace(/<svg /, `<svg width="${W}" height="${H}" `);
+  const url = URL.createObjectURL(new Blob([s], {type: "image/svg+xml"}));
+  try {
+    const img = new Image();
+    await new Promise((ok, fail) => { img.onload = ok; img.onerror = () => fail(new Error("no se pudo dibujar una página")); img.src = url; });
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const c = cv.getContext("2d");
+    c.fillStyle = "#fff"; c.fillRect(0, 0, W, H); c.drawImage(img, 0, 0, W, H);
+    const d = cv.toDataURL("image/jpeg", 0.92);
+    return d.slice(d.indexOf("base64,") + 7);
+  } finally { URL.revokeObjectURL(url); }
+}
+async function savePdf() {
+  if (!pl) return;
+  const msg = (t) => { $("plLoad").textContent = t; };
+  $("plPdf").disabled = true; msg("Preparando el PDF…");
+  let tok = null;
+  try {
+    const r = await pywebview.api.score_pages(pl.run_dir, pl.solo, pl.shift);
+    if (!r || !r.ok) { msg((r && r.error) || "No se pudo dibujar la partitura."); return; }
+    tok = await pywebview.api.pdf_begin(pl.run_dir);
+    for (const [i, page] of r.pages.entries()) {
+      msg(`Preparando el PDF… página ${i + 1} de ${r.pages.length}`);
+      if (!await pywebview.api.pdf_page(tok, await svgPageJpeg(page))) throw new Error("Coralis no aceptó una página");
+    }
+    const res = await pywebview.api.pdf_end(tok, pl.run_dir, r.name); tok = null;
+    savedNote(res, "PDF");
+  } catch (e) {
+    msg("No se pudo hacer el PDF: " + (e && e.message ? e.message : e));
+  } finally {
+    if (tok) pywebview.api.pdf_cancel(tok);
+    $("plPdf").disabled = false;
+  }
+}
+function loopRange() {   // [start, end) in quarter notes of the stretch to repeat, or null
+  if (!$("plLoop").checked) return null;
+  const ms = pl.data.measures, n = ms.length;
+  let a = Math.max(1, Math.min(n, Math.round(+$("plLoopA").value) || 1));
+  let b = Math.max(1, Math.min(n, Math.round(+$("plLoopB").value) || a));
+  if (b < a) [a, b] = [b, a];
+  return {a: ms[a - 1].start, b: ms[b - 1].start + ms[b - 1].length};
+}
+function loopChanged() {   // while playing: go on with the new stretch from where it is
+  if (!pl || !pl.playing) return;
+  const q = Math.max(pl.startQ, currentQ());
+  pl.playing = false; silence(); pl.resumeQ = q; play(true);
+}
 function renderVoices() {
   $("plVoices").innerHTML = pl.data.voices.map((v) => `
     <div class="pl-voice ${pl.hl === v.id ? "hl" : ""}">
       <div class="top"><span>${esc(v.name)}</span><span class="hint">${Math.round(pl.vol[v.id] * 100)}%</span></div>
       <input type="range" min="0" max="100" value="${Math.round(pl.vol[v.id] * 100)}"
         oninput="pl.vol['${v.id}'] = this.value / 100; applyGains(); this.previousElementSibling.lastChild.textContent = this.value + '%'">
+      <label class="hint" style="display:flex;align-items:center;gap:6px;margin-top:4px" title="Con audífonos: de qué lado se oye esta voz">Lado
+        <span>Izq.</span><input type="range" min="-100" max="100" step="25" value="${Math.round(pl.pan[v.id] * 100)}" style="flex:1"
+          oninput="pl.pan['${v.id}'] = this.value / 100; applyGains()"><span>Der.</span></label>
       <div class="btns">
         <button class="btn ${pl.hl === v.id ? "primary" : ""}" onclick="highlightVoice('${v.id}')">Destacar</button>
         <button class="btn ${pl.solo === v.id ? "primary" : ""}" onclick="soloVoice('${v.id}')">Sola</button>
@@ -1667,14 +1971,22 @@ function buildGraph(ctx, out = null) {
   const room = ctx.createConvolver(); room.buffer = ir;
   const wet = ctx.createGain(); wet.gain.value = 0.22;
   g.master.connect(room); room.connect(wet); wet.connect(out);
+  g.pans = {};
   pl.data.voices.forEach((v) => {
-    const gain = ctx.createGain(); gain.gain.value = voiceLevel(v.id); gain.connect(g.master); g.gains[v.id] = gain;
+    const gain = ctx.createGain(); gain.gain.value = voiceLevel(v.id); g.gains[v.id] = gain;
+    if (ctx.createStereoPanner) {   // left or right (with headphones)
+      const pan = ctx.createStereoPanner(); pan.pan.value = pl.pan[v.id] || 0;
+      gain.connect(pan); pan.connect(g.master); g.pans[v.id] = pan;
+    } else gain.connect(g.master);
   });
   return g;
 }
 function applyGains() {
   if (!pl || !pl.live) return;
-  for (const v of pl.data.voices) pl.live.gains[v.id].gain.setTargetAtTime(voiceLevel(v.id), pl.ctx.currentTime, 0.02);
+  for (const v of pl.data.voices) {
+    pl.live.gains[v.id].gain.setTargetAtTime(voiceLevel(v.id), pl.ctx.currentTime, 0.02);
+    if (pl.live.pans[v.id]) pl.live.pans[v.id].pan.setTargetAtTime(pl.pan[v.id] || 0, pl.ctx.currentTime, 0.02);
+  }
 }
 function measureAt(q) {
   const ms = pl.data.measures;
@@ -1689,11 +2001,11 @@ function click(g, time, strong, countIn = false) {
   env.gain.exponentialRampToValueAtTime(strong ? 0.6 : 0.35, time + 0.002);
   env.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
   o.connect(env); env.connect(countIn ? g.master : g.clicks);
-  o.start(time); o.stop(time + 0.08);
+  o.start(time); o.stop(time + 0.08); o._end = time + 0.08;
   g.sources.push(o);
 }
 function playNote(g, voice, n, at, secQ) {
-  const b = pl.buffers[n.midi];
+  const b = pl.buffers[n.midi + pl.shift];
   if (!b) return;
   const src = g.ctx.createBufferSource(), env = g.ctx.createGain();
   src.buffer = b.buf; src.playbackRate.value = b.rate;
@@ -1703,7 +2015,7 @@ function playNote(g, voice, n, at, secQ) {
   env.gain.setValueAtTime(0.8, Math.max(at + 0.01, at + len - 0.05));
   env.gain.exponentialRampToValueAtTime(0.0001, at + len + 0.25);
   src.connect(env); env.connect(g.gains[voice]);
-  src.start(at); src.stop(at + len + 0.3);
+  src.start(at); src.stop(at + len + 0.3); src._end = at + len + 0.3;
   g.sources.push(src);
 }
 function schedule(g, startQ, t0, secQ, opts) {
@@ -1714,12 +2026,15 @@ function schedule(g, startQ, t0, secQ, opts) {
     for (let b = 0; b < bi.beats; b++) click(g, t0 + b * bi.q * secQ, b === 0, true);
     t0 += m0.length * secQ;
   }
+  const endQ = opts.endQ != null ? opts.endQ : Infinity;   // the end of the stretch being repeated
   for (const v of pl.data.voices) {
     if (!voiceLevel(v.id) && opts.offline) continue;  // a silent voice: nothing to render
     for (const n of v.notes) {
-      if (n.start >= startQ - 1e-6) playNote(g, v.id, n, t0 + (n.start - startQ) * secQ, secQ);
-      else if (opts.continuing && n.start + n.dur > startQ + 1e-6)   // sounding now: it goes on, for what is left
-        playNote(g, v.id, {midi: n.midi, dur: n.start + n.dur - startQ}, t0, secQ);
+      if (n.start >= endQ - 1e-6) continue;
+      const dur = Math.min(n.dur, endQ - n.start);
+      if (n.start >= startQ - 1e-6) playNote(g, v.id, {midi: n.midi, dur}, t0 + (n.start - startQ) * secQ, secQ);
+      else if (opts.continuing && n.start + dur > startQ + 1e-6)   // sounding now: it goes on, for what is left
+        playNote(g, v.id, {midi: n.midi, dur: n.start + dur - startQ}, t0, secQ);
     }
   }
   for (const k of opts.counts || []) {   // «3, 2, 1» before a stanza: on its silent measure, always heard
@@ -1734,7 +2049,7 @@ function schedule(g, startQ, t0, secQ, opts) {
       const m = pl.data.measures[k], bi = beatInfo(m.time);
       for (let b = 0; b < bi.beats; b++) {
         const q = m.start + b * bi.q;
-        if (q >= startQ - 1e-6 && q < m.start + m.length - 1e-6) click(g, t0 + (q - startQ) * secQ, b === 0);
+        if (q >= startQ - 1e-6 && q < m.start + m.length - 1e-6 && q < endQ - 1e-6) click(g, t0 + (q - startQ) * secQ, b === 0);
       }
     }
   }
@@ -1744,13 +2059,17 @@ async function play(continuing = false) {
   if (pl.playing) { pause(); return; }
   if (pl.ctx.state === "suspended") await pl.ctx.resume();
   const fromMeasure = Math.max(1, Math.min(pl.data.measures.length, +$("plFrom").value || 1)) - 1;
-  const startQ = pl.resumeQ != null ? pl.resumeQ : pl.data.measures[fromMeasure].start;
+  let startQ = pl.resumeQ != null ? pl.resumeQ : pl.data.measures[fromMeasure].start;
   pl.resumeQ = null;
+  const loop = loopRange();
+  if (loop && (startQ < loop.a - 1e-6 || startQ >= loop.b - 1e-6)) { startQ = loop.a; continuing = false; }
+  pl.loop = loop;
   const secQ = 60 / (tempoValue() * pl.beatQ);
   pl.secQ = secQ;
   pl.t0 = schedule(pl.live, startQ, pl.ctx.currentTime + (continuing ? 0.03 : 0.15), secQ,
-                   {countIn: $("plCount").checked && !continuing, clicks: true, continuing});
+                   {countIn: $("plCount").checked && !continuing, clicks: true, continuing, endQ: loop ? loop.b : null});
   pl.startQ = startQ;
+  if (loop) { pl.nextT0 = pl.t0 + (loop.b - startQ) * secQ; pl.nextReady = false; }
   pl.playing = true;
   $("plPlay").textContent = "⏸ Pausa"; $("plStop").disabled = false;
   tick();
@@ -1773,6 +2092,7 @@ function stopPlay() {
 }
 function currentQ() { return pl.startQ + (pl.ctx.currentTime - pl.t0) / pl.secQ; }
 function showPos(q) {
+  scoreAt(q);
   const k = measureAt(Math.max(0, q));
   $("plPos").textContent = `Compás ${pl.data.measures[k].number}`;
   $("plBar").firstElementChild.style.width = (100 * Math.max(0, q) / pl.totalQ) + "%";
@@ -1790,8 +2110,19 @@ function showPos(q) {
 }
 function tick() {
   if (!pl || !pl.playing) return;
+  if (pl.loop) {
+    const now = pl.ctx.currentTime, L = pl.loop;
+    if (!pl.nextReady && now > pl.nextT0 - 0.4) {   // the next time round, seamless
+      pl.live.sources = pl.live.sources.filter((x) => !(x._end < now));   // drop the ones that have finished
+      schedule(pl.live, L.a, pl.nextT0, pl.secQ, {clicks: true, endQ: L.b});
+      pl.nextReady = true;
+    }
+    if (now >= pl.nextT0) {
+      pl.startQ = L.a; pl.t0 = pl.nextT0; pl.nextT0 += (L.b - L.a) * pl.secQ; pl.nextReady = false;
+    }
+  }
   const q = currentQ();
-  if (q >= pl.totalQ) { stopPlay(); return; }
+  if (!pl.loop && q >= pl.totalQ) { stopPlay(); return; }
   showPos(q);
   requestAnimationFrame(tick);
 }
@@ -1799,13 +2130,7 @@ function seekBar(ev) {
   if (!pl) return;
   const r = $("plBar").getBoundingClientRect();
   const q = pl.totalQ * Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
-  const k = measureAt(q);
-  $("plFrom").value = k + 1;
-  const was = pl.playing;
-  if (was) { pl.playing = false; silence(); }
-  pl.resumeQ = null;
-  showPos(pl.data.measures[k].start);
-  if (was) play();
+  goToMeasure(measureAt(q));
 }
 function loadLame() {
   if (window.lamejs) return Promise.resolve();
@@ -1817,9 +2142,10 @@ function loadLame() {
 }
 function audioName() {
   const names = Object.fromEntries(pl.data.voices.map((v) => [v.id, v.name]));
-  if (pl.solo) return `${pl.data.title} - ${names[pl.solo]}.mp3`;
-  if (pl.hl) return `${pl.data.title} - ${names[pl.hl]} destacada.mp3`;
-  return `${pl.data.title} - 4 voces.mp3`;
+  const t = shiftLabel(pl.shift);
+  if (pl.solo) return `${pl.data.title} - ${names[pl.solo]}${t}.mp3`;
+  if (pl.hl) return `${pl.data.title} - ${names[pl.hl]} destacada${t}.mp3`;
+  return `${pl.data.title} - 4 voces${t}.mp3`;
 }
 async function downloadAudio(onlyVoice) {
   if (!pl || !pl.buffers) return;
@@ -2125,7 +2451,7 @@ async function createVideo(opts = {}) {
   let staves = null;
   if (opts.staff) {
     $("plLoad").textContent = "Preparando el pentagrama para el video…";
-    const svgs = await pywebview.api.video_staves(pl.run_dir, voice.id);
+    const svgs = await pywebview.api.video_staves(pl.run_dir, voice.id, pl.shift);
     staves = await Promise.all(svgs.map(svgImage));
     $("plLoad").textContent = "";
   }
@@ -2211,7 +2537,7 @@ async function finishVideo() {
   $("vidMsg").textContent = "Guardando el video…";
   await v.pending;
   if (v.failed) { pywebview.api.video_cancel(v.token); endVideoUI("No se pudo grabar el video: " + v.failed); return; }
-  const r = await pywebview.api.video_end(v.token, pl.run_dir, `${pl.data.title} - ${v.subtitle}`, v.ext, null);
+  const r = await pywebview.api.video_end(v.token, pl.run_dir, `${pl.data.title} - ${v.subtitle}${shiftLabel(pl.shift)}`, v.ext, null);
   endVideoUI(r && r.ok ? `✓ Video guardado en la carpeta del himno: ${r.path.split(/[\\/]/).pop()}` : (r && r.error) || "No se guardó el video.");
   if (r && r.ok) savedNote(r, "Video");
 }
@@ -2239,9 +2565,32 @@ async function chooseVoice(runDir) {
   $("voiceDlg").showModal();
 }
 async function downloadVoice(runDir, voice) {
-  const r = await pywebview.api.export_voice(runDir, voice);
+  const inPlayer = pl && pl.run_dir === runDir && !$("player").classList.contains("hidden");
+  const r = await pywebview.api.export_voice(runDir, voice, inPlayer ? pl.shift : 0);
   if (pl) savedNote(r, "Partitura"); else if (r && r.ok) alert("Guardada en la carpeta del himno: " + r.path.split("/").pop());
   else if (r && r.error) alert(r.error);
+}
+async function saveMidi() {
+  if (!pl) return;
+  $("plMidi").disabled = true; $("plLoad").textContent = "Guardando el MIDI…";
+  try {
+    const r = await pywebview.api.export_midi(pl.run_dir, pl.solo, pl.shift, tempoValue());
+    savedNote(r, "MIDI");
+  } finally { $("plMidi").disabled = false; }
+}
+async function saveScoreAtTone() {
+  if (!pl) return;
+  $("plScore").disabled = true; $("plLoad").textContent = "Guardando la partitura…";
+  try {
+    const r = await pywebview.api.export_voice(pl.run_dir, pl.solo, pl.shift);
+    savedNote(r, "Partitura");
+  } finally { $("plScore").disabled = false; }
+}
+function splitSides(on) {   // the highlighted voice to the left, the others to the right (headphones)
+  if (!pl) return;
+  if (on && !pl.hl) { $("plLoad").textContent = "Primero pulsa «Destacar» en tu voz."; return; }
+  pl.data.voices.forEach((v) => { pl.pan[v.id] = !on ? 0 : v.id === pl.hl ? -1 : 1; });
+  applyGains(); renderVoices();
 }
 function savedNote(r, what) {   // where it went, and a button to open the hymn's folder
   if (!r || !r.ok) { $("plLoad").textContent = (r && r.error) || `No se guardó.`; return; }
@@ -2252,12 +2601,15 @@ function savedNote(r, what) {   // where it went, and a button to open the hymn'
 function closePlayer() {
   if (vid) { if (!confirm("Se está grabando un video. ¿Cancelarlo y salir?")) return; cancelVideo(); }
   stopPlay(); show("player", false); show("home", true);
+  sv = null; $("plScoreView").innerHTML = ""; $("player").classList.remove("with-score");
 }
 
 // ---------------------------------------------------------------- fixing notes by hand
 const STEPS = "CDEFGAB", STEP_ES = {C: "do", D: "re", E: "mi", F: "fa", G: "sol", A: "la", B: "si"};
 const DUR_ES = {"4": "redonda", "3": "blanca con puntillo", "2": "blanca", "3/2": "negra con puntillo", "1": "negra",
-                "3/4": "corchea con puntillo", "1/2": "corchea", "1/4": "semicorchea"};
+                "3/4": "corchea con puntillo", "1/2": "corchea", "1/4": "semicorchea", "3/8": "semicorchea con puntillo",
+                "1/8": "fusa", "4/3": "blanca de tresillo", "2/3": "negra de tresillo", "1/3": "corchea de tresillo",
+                "1/6": "semicorchea de tresillo"};
 let ed = null;
 function parsePitch(p) {
   const m = /^([A-G])(#{1,2}|-{1,2})?(\d)$/.exec(p);
@@ -2504,6 +2856,24 @@ window.addEventListener("pywebviewready", async () => {
   $("plTempo").addEventListener("change", () => setTempo(tempoValue()));
   $("plTempo").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("plTempo").blur(); } });
   $("plSlower").addEventListener("click", () => setTempo(tempoValue() - 1));
+  $("plDown").addEventListener("click", () => pl && setShift(pl.shift - 1));
+  $("plUp").addEventListener("click", () => pl && setShift(pl.shift + 1));
+  $("plLoop").addEventListener("change", loopChanged);
+  for (const id of ["plLoopA", "plLoopB"]) {
+    $(id).addEventListener("change", () => { if (!$("plLoop").checked) $("plLoop").checked = true; loopChanged(); });
+    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $(id).blur(); } });
+  }
+  $("plMidi").addEventListener("click", saveMidi);
+  $("plPdf").addEventListener("click", savePdf);
+  try { if (localStorage.getItem("coralis.showScore") === "0") $("plShowScore").checked = false; } catch (e) { /* default */ }
+  $("plShowScore").addEventListener("change", loadScoreView);
+  $("plScoreView").addEventListener("click", (ev) => {
+    const g = ev.target.closest && ev.target.closest("g.measure");
+    if (g && sv && sv.index.has(g.id) && pl && !vid) goToMeasure(sv.index.get(g.id));
+  });
+  $("plScore").addEventListener("click", saveScoreAtTone);
+  $("plSplit").addEventListener("click", () => splitSides(true));
+  $("plCenter").addEventListener("click", () => splitSides(false));
   $("plFaster").addEventListener("click", () => setTempo(tempoValue() + 1));
   $("plClick").addEventListener("change", () => {
     if (pl && pl.live) pl.live.clicks.gain.setTargetAtTime($("plClick").checked ? 1 : 0, pl.ctx.currentTime, 0.01);

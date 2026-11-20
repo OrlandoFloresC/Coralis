@@ -329,6 +329,7 @@ class Api:
             if measures[k - 1]["silent"] and not measures[k]["silent"]:
                 stanzas.append(k)
         return {"ok": True, "title": self._summary(run)["title"], "tempo": tempo, "measures": measures,
+                "key": cs.measures[0].key_fifths if cs.measures else 0,
                 "stanzas": stanzas,
                 "voices": [{"id": v, "name": names[v]["name"], "notes": voices[v], "words": words[v]}
                            for v in VOICES]}
@@ -411,8 +412,12 @@ class Api:
                           "vwords": m.get("vwords", {}), "own_words": m.get("own_words", False),
                           "versions": {v: o for v, o in versions.get(m["index"], {}).items() if len(o) > 1}})
         lines = max([int(n) for m in measures for n in m.get("words", {})] + [1])
+        from ..model import corrections
+
+        saved = corrections.load(run)
         return {"title": self._summary(run)["title"], "measures": out, "verses": lines,
-                "voice_names": self._names(run), "doubtful": self._doubtful_indices(run)}
+                "voice_names": self._names(run), "doubtful": self._doubtful_indices(run),
+                "structure": saved.get("structure") or [], "signatures": saved.get("signatures") or {}}
 
     def measure_thumb(self, run_dir: str, index: int) -> str | None:
         crop = Path(run_dir) / "report" / "img" / f"m{int(index):03d}.png"
@@ -458,6 +463,74 @@ class Api:
         if not rebuild:
             (run / PENDING).write_text("Correcciones guardadas; falta rehacer la partitura.\n", encoding="utf-8")
             return {"ok": True, "pending": True}
+        return self.rebuild(run_dir)
+
+    def measure_op(self, run_dir: str, op: str, at: int) -> dict:
+        """Add a measure of rests at that place, or remove the measure there; the corrections saved
+        for the other measures follow them. The score is rebuilt (onEditorDone)."""
+        from ..model import corrections
+        from ..model.structure import KEYED, rekey
+
+        if self._busy:
+            return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        run = Path(run_dir)
+        count = len(json.loads((run / "notas.json").read_text(encoding="utf-8")))
+        at = int(at)
+        if op not in ("insert", "delete") or not (0 <= at <= count) or (op == "delete" and (at == count or count < 2)):
+            return {"ok": False, "error": "Ese compás no existe."}
+        data = corrections.load(run)
+        entry = {"op": op, "at": at}
+        if op == "delete":   # kept with the step, to give them back if it is undone
+            entry["saved"] = {name: data[name][str(at)] for name in KEYED
+                              if isinstance(data.get(name), dict) and str(at) in data[name]}
+        rekey(data, entry)
+        data.setdefault("structure", []).append(entry)
+        corrections.save(run, data)
+        (run / PENDING).unlink(missing_ok=True)
+        return self.rebuild(run_dir)
+
+    def measure_undo(self, run_dir: str) -> dict:
+        """Undo the last measure added or removed (with the corrections the removed one had)."""
+        from ..model import corrections
+        from ..model.structure import rekey
+
+        if self._busy:
+            return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        run = Path(run_dir)
+        data = corrections.load(run)
+        ops = data.get("structure") or []
+        if not ops:
+            return {"ok": False, "error": "No hay cambios de compases que deshacer."}
+        last = ops.pop()
+        if last["op"] == "insert":
+            rekey(data, {"op": "delete", "at": last["at"]})
+        else:
+            rekey(data, {"op": "insert", "at": last["at"]})
+            for name, val in (last.get("saved") or {}).items():
+                data.setdefault(name, {})[str(last["at"])] = val
+        corrections.save(run, data)
+        return self.rebuild(run_dir)
+
+    def set_signature(self, run_dir: str, index: int, time: list | None, key: int | None, scope: str = "run") -> dict:
+        """The time and/or key signature from that measure ("run": until the reading changes;
+        "one": that measure only). None for both = back to what was read. Rebuilds."""
+        from ..model import corrections
+
+        if self._busy:
+            return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        run = Path(run_dir)
+        data = corrections.load(run)
+        sigs = data.setdefault("signatures", {})
+        entry = {"scope": "one" if scope == "one" else "run"}
+        if time:
+            entry["time"] = [int(time[0]), int(time[1])]
+        if key is not None:
+            entry["key"] = int(key)
+        if "time" in entry or "key" in entry:
+            sigs[str(int(index))] = entry
+        else:
+            sigs.pop(str(int(index)), None)
+        corrections.save(run, data)
         return self.rebuild(run_dir)
 
     def rebuild(self, run_dir: str) -> dict:
@@ -523,31 +596,147 @@ class Api:
         (run / PENDING).write_text("Nombres de las voces cambiados; falta rehacer la partitura.\n", encoding="utf-8")
         return {"ok": True, "names": self._names(run)}
 
-    def export_voice(self, run_dir: str, voice: str) -> dict:
-        """A MusicXML with one voice only (with its words, every stanza), where the user says."""
+    def export_voice(self, run_dir: str, voice: str | None, semitones: int = 0) -> dict:
+        """A MusicXML with one voice only (with its words, every stanza), or with the four
+        (voice None), in the hymn's folder; raised or lowered by some semitones if asked."""
+        prep = self._export_score(run_dir, voice, semitones)
+        if not prep["ok"]:
+            return prep
+        dest = _free_name(prep["run"], prep["stem"], "musicxml")
+        prep["score"].write("musicxml", fp=str(dest))
+        return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
+
+    def export_midi(self, run_dir: str, voice: str | None, semitones: int = 0, tempo: float | None = None) -> dict:
+        """A MIDI file (one track per voice) at the speed the player has, in the hymn's folder."""
+        from music21 import duration, instrument, tempo as m21tempo
+
+        prep = self._export_score(run_dir, voice, semitones)
+        if not prep["ok"]:
+            return prep
+        score = prep["score"]
+        for part in score.parts:   # each track named after its voice, with a piano sound
+            inst = instrument.Piano()
+            inst.partName = inst.instrumentName = part.partName
+            part.insert(0, inst)
+        if tempo:
+            first = score.parts[0].getElementsByClass("Measure").first() if score.parts else None
+            if first is not None:
+                for mm in first.getElementsByClass(m21tempo.MetronomeMark):
+                    first.remove(mm)
+                (n, d) = prep["time"]
+                beat = 1.5 if d == 8 and n % 3 == 0 and n > 3 else 4 / d
+                first.insert(0, m21tempo.MetronomeMark(number=float(tempo), referent=duration.Duration(beat)))
+        dest = _free_name(prep["run"], prep["stem"], "mid")
+        score.write("midi", fp=str(dest))
+        return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
+
+    def score_pages(self, run_dir: str, voice: str | None = None, semitones: int = 0) -> dict:
+        """The file for practice drawn as A4 pages (Verovio SVG), to follow it while it plays and to
+        print it. With what sounds when: per measure (in order), [measure, quarter notes from its
+        start, notes that start, notes that end] (ids of the drawing)."""
+        import verovio
+
+        from ..model.export import to_musicxml_string
+
+        prep = self._export_score(run_dir, voice, semitones)
+        if not prep["ok"]:
+            return prep
+        verovio.enableLog(verovio.LOG_ERROR)
+        tk = verovio.toolkit(False)   # in a thread: without its fonts, then pointed to them
+        tk.setResourcePath(str(Path(verovio.__file__).parent / "data"))
+        tk.setOptions({"pageWidth": 2100, "pageHeight": 2970, "scale": 40, "breaks": "auto",
+                       "header": "auto", "footer": "auto", "svgViewBox": True,
+                       "pageMarginTop": 80, "pageMarginBottom": 80, "pageMarginLeft": 100, "pageMarginRight": 100})
+        if not tk.loadData(to_musicxml_string(prep["score"])):
+            return {"ok": False, "error": "No se pudo dibujar la partitura."}
+        pages = [tk.renderToSVG(i + 1) for i in range(tk.getPageCount())]
+        order = {mid: k for k, mid in enumerate(m for s in pages for m in re.findall(r'<g id="([^"]+)" class="measure', s))}
+        tm = tk.renderToTimemap({"includeMeasures": True, "includeRests": False})
+        if isinstance(tm, str):
+            tm = json.loads(tm)
+        events, k, start = [], 0, 0.0
+        for e in tm:
+            if "measureOn" in e and e["measureOn"] in order:
+                k, start = order[e["measureOn"]], float(e["qstamp"])
+            if e.get("on") or e.get("off"):
+                events.append([k, round(float(e["qstamp"]) - start, 6), e.get("on", []), e.get("off", [])])
+        return {"ok": True, "pages": pages, "events": events, "measures": len(order), "name": prep["stem"]}
+
+    def pdf_begin(self, run_dir: str) -> str:
+        """Start receiving the pages of a PDF (each one a picture of an A4 page)."""
+        folder = tempfile.mkdtemp(prefix="coralis-pdf-")
+        self._pdfs = getattr(self, "_pdfs", set()) | {folder}
+        return folder
+
+    def pdf_page(self, token: str, jpeg_b64: str) -> bool:
+        import base64
+
+        if token not in getattr(self, "_pdfs", set()):
+            return False
+        n = len(list(Path(token).glob("*.jpg")))
+        (Path(token) / f"{n:04d}.jpg").write_bytes(base64.b64decode(jpeg_b64))
+        return True
+
+    def pdf_end(self, token: str, run_dir: str, name: str) -> dict:
+        """Join the pages into an A4 PDF, in the hymn's folder."""
+        import pypdfium2 as pdfium
+
+        if token not in getattr(self, "_pdfs", set()):
+            return {"ok": False, "error": "No se encontraron las páginas."}
+        self._pdfs.discard(token)
+        files = sorted(Path(token).glob("*.jpg"))
+        try:
+            if not files:
+                return {"ok": False, "error": "No llegó ninguna página."}
+            dest = _free_name(Path(run_dir), name, "pdf")
+            w, h = 595.28, 841.89   # A4 in points
+            pdf = pdfium.PdfDocument.new()
+            for f in files:
+                page = pdf.new_page(w, h)
+                img = pdfium.PdfImage.new(pdf)
+                img.load_jpeg(str(f), inline=True)
+                img.set_matrix(pdfium.PdfMatrix().scale(w, h))
+                page.insert_obj(img)
+                page.gen_content()
+            pdf.save(str(dest))
+            pdf.close()
+            return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
+        finally:
+            shutil.rmtree(token, ignore_errors=True)
+
+    def pdf_cancel(self, token: str) -> None:
+        if token in getattr(self, "_pdfs", set()):
+            self._pdfs.discard(token)
+            shutil.rmtree(token, ignore_errors=True)
+
+    def _export_score(self, run_dir: str, voice: str | None, semitones: int) -> dict:
         from ..model.export import to_music21
         from ..model.score import VOICES, build_choral_score
+        from ..model.transpose import shift_label, transpose_score
         from ..pipeline import final_file
 
-        if voice not in VOICES:
+        if voice is not None and voice not in VOICES:
             return {"ok": False, "error": "Esa voz no existe."}
         run = Path(run_dir)
         self._fresh(run)
         path = final_file(run)
         if path is None:
             return {"ok": False, "error": "Todavía no hay partitura."}
-        name = self._names(run)[voice]
-        dest = _free_name(run, f"{path.stem} - {name}", "musicxml")
-        score = to_music21(build_choral_score(path), self._cfg_for(run))
-        for part in list(score.parts):
-            if part.id != voice:
-                score.remove(part)
-        score.write("musicxml", fp=str(dest))
-        return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
+        semitones = max(-12, min(12, int(semitones or 0)))
+        cs = transpose_score(build_choral_score(path), semitones)
+        score = to_music21(cs, self._cfg_for(run))
+        if voice is not None:
+            for part in list(score.parts):
+                if part.id != voice:
+                    score.remove(part)
+        who = self._names(run)[voice] if voice else "4 voces"
+        return {"ok": True, "run": run, "score": score, "stem": f"{path.stem} - {who}{shift_label(semitones)}",
+                "time": cs.measures[0].time if cs.measures else (4, 4)}
 
-    def video_staves(self, run_dir: str, voice: str) -> list:
+    def video_staves(self, run_dir: str, voice: str, semitones: int = 0) -> list:
         """Each measure of the file for practice, one voice, drawn on its own staff (for the video)."""
         from ..model.score import VOICES, build_choral_score
+        from ..model.transpose import transpose_score
         from ..output.render import render_voice_svg
         from ..pipeline import final_file
 
@@ -559,7 +748,8 @@ class Api:
         if path is None:
             return []
         out = []
-        for m in build_choral_score(path).measures:
+        cs = transpose_score(build_choral_score(path), max(-12, min(12, int(semitones or 0))))
+        for m in cs.measures:
             evs = [e for e in m.voices.get(voice, []) if e.duration > 0]
             for e in evs:
                 e.lyrics = {}   # the words are shown big, apart

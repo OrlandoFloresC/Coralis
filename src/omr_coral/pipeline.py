@@ -20,6 +20,7 @@ from .model.export import to_music21
 from .model.layout import read_audiveris_layout
 from .model.lyrics_fix import fix_ocr_lyrics, merge_elisions, split_glued_syllables
 from .model.lyrics_text import apply_lyrics_text, read_lyrics_file
+from .model.structure import apply_signatures, apply_structure
 from .model.verses import expand_verses, merge_split_measures
 from .model.merge import merge_pages
 from .model import corrections
@@ -339,8 +340,18 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     vote_issues += refine(voted, cfg)
     # the user's answers in the review (signs the engines missed): they win over the vote
     answers = corrections.load(run_dir)
+    # measures added or removed by hand: everything else the user saved refers to the measures after that
+    where = apply_structure(voted, answers)
+    if len(where) != len(voted.measures) or any(o != n for o, n in where.items()):
+        vote_issues = [i for i in vote_issues if i.measure is None or where.get(i.measure) is not None]
+        for i in vote_issues:
+            if i.measure is not None:
+                i.measure = where[i.measure]
+        by_new = {n: md for o, md in enumerate(details["measures"]) if (n := where.get(o)) is not None}
+        details["measures"] = [by_new.get(k, {"index": k, "added_by_hand": True}) for k in range(len(voted.measures))]
     vote_issues += corrections.apply(voted, answers)
     fix_endings(voted)  # an ending marked "1.-6." by hand: the rest of it, and the next one is the 7th
+    apply_signatures(voted, answers)  # time / key signatures given by hand (before the rhythm)
     # notes chosen by the user: no longer "readings disagree" / "does not match the image"
     decided = corrections.apply_voices(voted, answers)
     decided |= corrections.apply_rhythm(voted, answers)  # notes moved by hand (rhythm), after the version chosen

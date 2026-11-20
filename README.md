@@ -13,6 +13,10 @@ Convierte un PDF o fotos en un MusicXML con las 4 voces (soprano, alto, baríton
 > de leer. El reporte marca los compases dudosos para que los revises. **Compara siempre el resultado
 > con la partitura impresa: la decisión final la tienes tú.**
 
+**¿Cómo se usa?** Lee la [guía de Coralis](GUIA.md): convertir, escuchar y ensayar (tono, repetir un tramo,
+partitura a la vista), guardar audio, video, MIDI y PDF, y corregir todo en el editor.
+Lo nuevo de cada versión está en [NOVEDADES.md](NOVEDADES.md).
+
 ## Descargar
 
 **Mac con chip de Apple (M1 o posterior):** descarga el `.dmg` de la última versión en
@@ -180,6 +184,9 @@ y cambia solo lo que necesites: rutas de herramientas, idiomas de la letra, rang
 - [x] Fase 5: salida en 4 voces con estrofas separadas, letra desde texto y evaluación
 - [x] Ventana de escritorio (Coralis), copia digital en 2 pentagramas con repeticiones y signos,
       repeticiones desplegadas para practicar, revisión de signos y de notas con un clic
+- [x] Reproductor con piano y metrónomo (tono, repetir un tramo, partitura a la vista), audio mp3, video,
+      MIDI y PDF
+- [x] Editor completo: notas, ritmo, tresillos, letra, compases, cifra y armadura, signos
 
 ## Licencia
 
