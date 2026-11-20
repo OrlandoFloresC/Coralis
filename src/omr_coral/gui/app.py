@@ -304,7 +304,9 @@ class Api:
         tempo = None
         for m in cs.measures:
             length = float(m.bar_length)
-            measures.append({"start": t, "length": length, "time": list(m.time), "number": m.number})
+            silent = not any(not e.is_rest for evs in m.voices.values() for e in evs)
+            measures.append({"start": t, "length": length, "time": list(m.time), "number": m.number,
+                             "silent": silent})
             for st in m.staves:
                 tempo = tempo or st.tempo
             for v in VOICES:
@@ -321,7 +323,13 @@ class Api:
                     if 1 in e.lyrics:
                         words[v].append({"start": start, "text": e.lyrics[1][0], "syl": e.lyrics[1][1]})
             t += length
+        # where each stanza starts: the first measure, and the first one with music after a silent one
+        stanzas = [0] if measures else []
+        for k in range(1, len(measures)):
+            if measures[k - 1]["silent"] and not measures[k]["silent"]:
+                stanzas.append(k)
         return {"ok": True, "title": self._summary(run)["title"], "tempo": tempo, "measures": measures,
+                "stanzas": stanzas,
                 "voices": [{"id": v, "name": names[v]["name"], "notes": voices[v], "words": words[v]}
                            for v in VOICES]}
 
@@ -509,6 +517,55 @@ class Api:
                 score.remove(part)
         score.write("musicxml", fp=str(dest))
         return {"ok": True, "path": str(dest)}
+
+    def video_begin(self, run_dir: str) -> str:
+        """Start receiving a video, piece by piece. Returns a token (the temporary file)."""
+        import tempfile
+
+        fd, path = tempfile.mkstemp(prefix="coralis-video-", suffix=".part")
+        os.close(fd)
+        self._videos = getattr(self, "_videos", set()) | {path}
+        return path
+
+    def video_chunk(self, token: str, data_b64: str) -> bool:
+        import base64
+
+        if token not in getattr(self, "_videos", set()):
+            return False
+        try:
+            data = base64.b64decode(data_b64)
+        except ValueError:
+            traceback.print_exc()
+            return False
+        with open(token, "ab") as f:
+            f.write(data)
+        return True
+
+    def video_end(self, token: str, run_dir: str, name: str, ext: str) -> dict:
+        """The video is complete: ask where to keep it."""
+        import re
+        import shutil
+
+        if token not in getattr(self, "_videos", set()):
+            return {"ok": False, "error": "No se encontró el video."}
+        self._videos.discard(token)
+        ext = ext if ext in ("mp4", "webm") else "mp4"
+        safe = re.sub(r'[\\/:*?"<>|]+', " ", name).strip() or "video"
+        res = self._window.create_file_dialog(webview.FileDialog.SAVE, directory=str(Path(run_dir).parent),
+                                              save_filename=f"{safe}.{ext}", file_types=(f"Video (*.{ext})",))
+        if not res:
+            Path(token).unlink(missing_ok=True)
+            return {"ok": False, "error": "No se guardó (cancelado)."}
+        dest = Path(res if isinstance(res, str) else res[0])
+        if dest.suffix.lower() != f".{ext}":
+            dest = dest.with_suffix(f".{ext}")
+        shutil.move(token, dest)
+        return {"ok": True, "path": str(dest)}
+
+    def video_cancel(self, token: str) -> None:
+        if token in getattr(self, "_videos", set()):
+            self._videos.discard(token)
+            Path(token).unlink(missing_ok=True)
 
     def save_audio(self, run_dir: str, name: str, data_b64: str) -> dict:
         """Save the mp3 the window rendered, where the user says."""

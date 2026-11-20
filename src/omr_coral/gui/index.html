@@ -415,12 +415,19 @@
         <label><input type="checkbox" id="plClick" checked> Metrónomo</label>
         <label><input type="checkbox" id="plCount" checked> Un compás de entrada</label>
         <button class="btn" id="plSave" disabled title="Guarda un mp3 tal como suena ahora: voces, volúmenes, velocidad y metrónomo">⬇ Descargar audio</button>
+        <button class="btn" id="plVideo" disabled title="Graba un video con la letra (tipo karaoke) y el sonido como suena ahora">🎬 Crear video</button>
       </div>
       <div class="pl-bar" id="plBar" title="Haz clic para ir a ese punto"><div></div></div>
       <div class="row" style="justify-content:space-between;margin-top:6px">
         <span class="hint" id="plPos">Compás 1</span><span class="hint" id="plEnd"></span>
       </div>
       <div class="pl-now" id="plNow"></div>
+      <div id="vidBox" class="hidden" style="margin-top:12px">
+        <canvas id="vidCanvas" width="1920" height="1080" style="width:100%;border-radius:10px;background:#111"></canvas>
+        <div class="row" style="justify-content:space-between;margin-top:6px">
+          <span class="hint" id="vidMsg"></span><button class="btn" id="vidCancel">Cancelar</button>
+        </div>
+      </div>
     </section>
     <section class="card">
       <h2 style="margin:0 0 4px">Voces</h2>
@@ -1361,7 +1368,7 @@ async function openPlayer(runDir) {
     pl.live = buildGraph(pl.ctx);
     applyGains();
     $("plLoad").textContent = "Listo. Elige la velocidad y pulsa Reproducir.";
-    $("plPlay").disabled = false; $("plSave").disabled = false;
+    $("plPlay").disabled = false; $("plSave").disabled = false; $("plVideo").disabled = false;
   } catch (e) {
     $("plLoad").textContent = "No se pudo preparar el sonido: " + (e && e.message ? e.message : e);
   }
@@ -1408,10 +1415,11 @@ function soloVoice(id) {
   applyGains(); renderVoices();
 }
 function voiceLevel(id) { return !pl.solo || pl.solo === id ? pl.vol[id] : 0; }
-function buildGraph(ctx) {
+function buildGraph(ctx, out = null) {
   // the voices → their volume → the piano bus → a little room around it (a dry sample sounds synthetic)
   const g = {ctx, gains: {}, sources: []};
-  g.master = ctx.createGain(); g.master.gain.value = 0.9; g.master.connect(ctx.destination);
+  out = out || ctx.destination;
+  g.master = ctx.createGain(); g.master.gain.value = 0.9; g.master.connect(out);
   // the metronome has its own volume, so it can be switched on and off while playing
   g.clicks = ctx.createGain(); g.clicks.gain.value = $("plClick").checked ? 1 : 0; g.clicks.connect(g.master);
   const len = Math.floor(ctx.sampleRate * 1.8), ir = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -1421,7 +1429,7 @@ function buildGraph(ctx) {
   }
   const room = ctx.createConvolver(); room.buffer = ir;
   const wet = ctx.createGain(); wet.gain.value = 0.22;
-  g.master.connect(room); room.connect(wet); wet.connect(ctx.destination);
+  g.master.connect(room); room.connect(wet); wet.connect(out);
   pl.data.voices.forEach((v) => {
     const gain = ctx.createGain(); gain.gain.value = voiceLevel(v.id); gain.connect(g.master); g.gains[v.id] = gain;
   });
@@ -1475,6 +1483,13 @@ function schedule(g, startQ, t0, secQ, opts) {
       if (n.start >= startQ - 1e-6) playNote(g, v.id, n, t0 + (n.start - startQ) * secQ, secQ);
       else if (opts.continuing && n.start + n.dur > startQ + 1e-6)   // sounding now: it goes on, for what is left
         playNote(g, v.id, {midi: n.midi, dur: n.start + n.dur - startQ}, t0, secQ);
+    }
+  }
+  for (const k of opts.counts || []) {   // «3, 2, 1» before a stanza: on its silent measure, always heard
+    const m = pl.data.measures[k], bi = beatInfo(m.time);
+    for (let b = 0; b < bi.beats; b++) {
+      const q = m.start + b * bi.q;
+      if (q >= startQ - 1e-6) click(g, t0 + (q - startQ) * secQ, b === 0, true);
     }
   }
   if (opts.clicks) {
@@ -1600,8 +1615,7 @@ async function downloadAudio(onlyVoice) {
     }
     const end = enc.flush(); if (end.length) parts.push(end);
     const blob = new Blob(parts, {type: "audio/mpeg"});
-    const b64 = await new Promise((ok) => { const fr = new FileReader();
-      fr.onload = () => ok(fr.result.split(",")[1]); fr.readAsDataURL(blob); });
+    const b64 = await blobBase64(blob);
     msg("Guardando…");
     const r = await pywebview.api.save_audio(pl.run_dir, name, b64);
     msg(r && r.ok ? `✓ Audio guardado: ${r.path}` : (r && r.error) || "No se guardó el audio.");
@@ -1611,6 +1625,247 @@ async function downloadAudio(onlyVoice) {
     pl.solo = keep.solo; pl.hl = keep.hl;
     $("plSave").disabled = false;
   }
+}
+// ---------------------------------------------------------------- the video (lyrics like karaoke, with the sound)
+let vid = null;
+function videoMime() {
+  if (!window.MediaRecorder) return null;
+  for (const t of ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus",
+                   "video/webm;codecs=vp8,opus", "video/webm"])
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  return null;
+}
+function joinsNext(w) {   // the word goes on after this syllable (punctuation always ends it)
+  return (w.syl === "begin" || w.syl === "middle") && !/[.,;:!?»”)]$/.test(w.text);
+}
+function syllableLengths(words, notes) {
+  const ns = [...notes].sort((a, b) => a.start - b.start);
+  return words.map((w, i) => {
+    const next = words[i + 1] ? words[i + 1].start : Infinity;
+    let end = w.start;
+    for (const n of ns) if (n.start >= w.start - 1e-6 && n.start < next - 1e-6) end = Math.max(end, n.start + n.dur);
+    return Object.assign({}, w, {dur: Math.max(end - w.start, 0.25)});
+  });
+}
+function sylText(w) {   // as printed: «Sal - va - dor», a space between words
+  return w.text + (joinsNext(w) ? " - " : "   ");
+}
+function videoLines(words, measures, stanzas) {
+  // phrases to show: a line ends at punctuation once it is long enough, when it gets too long,
+  // or before a silent measure (between stanzas)
+  const silentStarts = measures.filter((m) => m.silent).map((m) => m.start);
+  const lines = []; let cur = [];
+  const text = (l) => l.map((w) => w.text + (joinsNext(w) ? "" : " ")).join("").trim();
+  words.forEach((w, i) => {
+    cur.push(w);
+    const next = words[i + 1], t = text(cur);
+    const punct = /[.,;:!?»”)]$/.test(w.text) && t.length >= 16;
+    const wordEnd = !joinsNext(w);
+    const gap = next && silentStarts.some((s) => s > w.start && s < next.start);
+    if (!next || gap || (punct && wordEnd) || (t.length > 40 && wordEnd)) { lines.push(cur); cur = []; }
+  });
+  return lines.map((l, i) => ({sylls: l, start: l[0].start, end: (lines[i + 1] ? lines[i + 1][0].start : l[l.length - 1].start + 4)}));
+}
+function fitFont(c, txt, size, max, weight = "600") {
+  for (; size > 20; size -= 2) { c.font = `${weight} ${size}px "Helvetica Neue", "Segoe UI", sans-serif`; if (c.measureText(txt).width <= max) break; }
+  return size;
+}
+function drawVideo(now) {
+  const c = vid.cv.getContext("2d"), W = 1920, H = 1080, d = pl.data;
+  const grd = c.createLinearGradient(0, 0, W, H); grd.addColorStop(0, "#10302a"); grd.addColorStop(1, "#15181c");
+  c.fillStyle = grd; c.fillRect(0, 0, W, H);
+  c.textAlign = "center"; c.textBaseline = "middle";
+  if (now < vid.musicAt - vid.countSec) {                 // title card
+    const a = Math.min(1, Math.max(0, (now - vid.startAt) / 0.8));
+    c.globalAlpha = a; c.fillStyle = "#ffffff";
+    fitFont(c, d.title, 110, W - 200, "700"); c.fillText(d.title, W / 2, H / 2 - 30);
+    c.fillStyle = "#9fd4c4"; c.font = `400 40px "Helvetica Neue", "Segoe UI", sans-serif`;
+    c.fillText(vid.subtitle, W / 2, H / 2 + 70);
+    c.globalAlpha = 1; return;
+  }
+  const q = (now - vid.musicAt) / vid.secQ;                // quarter notes since the music started
+  // top: title and stanza
+  c.textAlign = "left"; c.fillStyle = "#cfe7df"; c.font = `600 40px "Helvetica Neue", "Segoe UI", sans-serif`;
+  c.fillText(d.title, 70, 70);
+  let st = 0; d.stanzas.forEach((k, j) => { if (d.measures[k].start <= q + 1e-6) st = j; });
+  const nextSt = d.stanzas.findIndex((k) => d.measures[k].start > q + 1e-6);
+  c.textAlign = "right";
+  if (d.stanzas.length > 1) c.fillText(`Estrofa ${st + 1} de ${d.stanzas.length}`, W - 70, 70);
+  // the count before a stanza: the count-in, or the silent measure before it
+  let count = null;
+  if (q < 0) count = {k: 0, beat: Math.floor((q + vid.countQ) / beatInfo(d.measures[0].time).q), len: d.measures[0]};
+  else {
+    const k = measureAt(q), m = d.measures[k];
+    if (m.silent && nextSt >= 0 && d.stanzas[nextSt] === k + 1 && vid.counts)
+      count = {k: k + 1, beat: Math.floor((q - m.start) / beatInfo(m.time).q), len: m};
+  }
+  if (count) {
+    const bi = beatInfo(count.len.time), left = bi.beats - count.beat;
+    const n = d.stanzas.indexOf(count.k);
+    c.textAlign = "center"; c.fillStyle = "#9fd4c4"; c.font = `600 64px "Helvetica Neue", "Segoe UI", sans-serif`;
+    c.fillText(n > 0 || d.stanzas.length > 1 ? `Estrofa ${n + 1}` : "Prepárate", W / 2, H / 2 - 190);
+    c.fillStyle = "#ffffff"; c.font = `700 300px "Helvetica Neue", "Segoe UI", sans-serif`;
+    c.fillText(String(Math.max(1, left)), W / 2, H / 2 + 40);
+  } else {
+    // the line being sung, and the next one
+    const L = vid.lines; let i = L.findIndex((l) => l.start > q + 1e-6) - 1;
+    if (i < -1) i = L.length - 1;
+    const curL = i >= 0 ? L[i] : null, nextL = L[i + 1];
+    if (curL) {
+      const y = H / 2 + 20;
+      const whole = curL.sylls.map(sylText).join("").trimEnd();
+      fitFont(c, whole, 92, W - 160, "700");
+      let x = (W - c.measureText(whole).width) / 2;
+      c.textAlign = "left";
+      for (const w of curL.sylls) {
+        const txt = sylText(w), word = w.text, ww = c.measureText(word).width;
+        const now = w.start <= q + 1e-6 && q < w.start + w.dur - 1e-6, done = q >= w.start + w.dur - 1e-6;
+        c.fillStyle = now ? "#6fd3b4" : done ? "#9fd4c4" : "#ffffff";
+        c.fillText(txt, x, y);
+        // above it: one bar per beat it lasts, filling up while it is sung
+        const bq = beatInfo(d.measures[measureAt(w.start)].time).q, beats = w.dur / bq;
+        const MAX = 8, all = Math.max(1, Math.ceil(beats - 1e-6)), n = Math.min(all, MAX);
+        const room = Math.max(ww, c.measureText(txt).width - 12);    // never over the next syllable
+        const gap = n > 4 ? 4 : 6, bw = Math.max(5, Math.min(26, (room - (n - 1) * gap) / n));
+        const total = n * bw + (n - 1) * gap;
+        let bx = x + (ww - total) / 2;
+        const sung = Math.max(0, Math.min(beats, (q - w.start) / bq));
+        for (let b = 0; b < n; b++) {
+          const part = Math.min(1, beats - b);            // the last beat may be half a beat
+          c.fillStyle = "rgba(255,255,255,.22)"; c.fillRect(bx, y - 98, bw * part, 16);
+          const fill = Math.max(0, Math.min(part, sung - b));
+          if (fill > 0) { c.fillStyle = "#6fd3b4"; c.fillRect(bx, y - 98, bw * fill, 16); }
+          bx += bw + gap;
+        }
+        if (all > MAX) {   // longer than 8 beats: say so
+          c.fillStyle = "rgba(255,255,255,.6)"; c.font = `600 28px "Helvetica Neue", "Segoe UI", sans-serif`;
+          c.fillText("+", bx, y - 89);
+          fitFont(c, whole, 92, W - 160, "700");
+        }
+        x += c.measureText(txt).width;
+      }
+    }
+    if (nextL) {
+      const t = nextL.sylls.map(sylText).join("").trimEnd();
+      fitFont(c, t, 56, W - 200, "500"); c.textAlign = "center"; c.fillStyle = "rgba(255,255,255,.5)";
+      c.fillText(t, W / 2, H / 2 + 160);
+    }
+  }
+  // the beats of this measure, «1 2 3 4», the one now lit: to keep time at a glance
+  {
+    const mq = q < 0 ? d.measures[0] : d.measures[measureAt(q)];
+    const bi = beatInfo(mq.time), into = q < 0 ? q + vid.countQ : q - mq.start;
+    const cur = Math.floor(into / bi.q + 1e-6), gap = 90, x0 = W / 2 - (bi.beats - 1) * gap / 2;
+    c.textAlign = "center";
+    for (let b = 0; b < bi.beats; b++) {
+      const on = b === cur;
+      c.fillStyle = on ? "#6fd3b4" : "rgba(255,255,255,.3)";
+      c.font = `${on ? 700 : 500} ${on ? 64 : 44}px "Helvetica Neue", "Segoe UI", sans-serif`;
+      c.fillText(String(b + 1), x0 + b * gap, 185);
+    }
+  }
+  // bottom: measure, progress, credit
+  const k = measureAt(Math.max(0, q));
+  c.textAlign = "left"; c.fillStyle = "rgba(255,255,255,.6)"; c.font = `400 30px "Helvetica Neue", "Segoe UI", sans-serif`;
+  c.fillText(`Compás ${d.measures[k].number}`, 70, H - 70);
+  c.textAlign = "right"; c.fillText("Hecho con Coralis", W - 70, H - 70);
+  c.fillStyle = "rgba(255,255,255,.15)"; c.fillRect(70, H - 130, W - 140, 8);
+  c.fillStyle = "#6fd3b4"; c.fillRect(70, H - 130, (W - 140) * Math.min(1, Math.max(0, q) / pl.totalQ), 8);
+}
+async function createVideo() {
+  if (!pl || !pl.buffers || vid) return;
+  const mime = videoMime();
+  if (!mime || !vid_canCapture()) {
+    alert("Esta versión del sistema no permite grabar video dentro de Coralis. Puedes descargar el audio (mp3).");
+    return;
+  }
+  if (pl.playing) stopPlay();
+  const d = pl.data;
+  const voice = d.voices.find((v) => v.id === (pl.hl || "soprano")) || d.voices[0];
+  const names = Object.fromEntries(d.voices.map((v) => [v.id, v.name]));
+  const ctx = pl.ctx; if (ctx.state === "suspended") await ctx.resume();
+  const dest = ctx.createMediaStreamDestination();
+  const g = buildGraph(ctx, dest);
+  const secQ = 60 / (tempoValue() * pl.beatQ);
+  const counts = [];   // the silent measure right before each stanza after the first
+  d.stanzas.slice(1).forEach((k) => { if (k > 0 && d.measures[k - 1].silent) counts.push(k - 1); });
+  vid = {cv: $("vidCanvas"), lines: videoLines(syllableLengths(voice.words, voice.notes), d.measures, d.stanzas), secQ, g,
+         counts: true, chunks: [],
+         subtitle: pl.solo ? `${names[pl.solo]} sola` : pl.hl ? `${names[pl.hl]} destacada` : "4 voces"};
+  const titleSec = 3.5, countQ = d.measures[0].length;
+  vid.startAt = ctx.currentTime + 0.3;
+  vid.countSec = countQ * secQ; vid.countQ = countQ;
+  vid.musicAt = vid.startAt + titleSec + vid.countSec;
+  schedule(g, 0, vid.musicAt - vid.countSec, secQ, {countIn: true, clicks: $("plClick").checked, counts});
+  vid.endAt = vid.musicAt + pl.totalQ * secQ + 2.5;
+  // record the canvas and the sound
+  const stream = vid.cv.captureStream(30);
+  dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+  vid.rec = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 4000000, audioBitsPerSecond: 160000});
+  vid.ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
+  vid.token = await pywebview.api.video_begin(pl.run_dir);
+  vid.pending = Promise.resolve();
+  vid.rec.ondataavailable = (ev) => {
+    if (!ev.data || !ev.data.size || !vid) return;
+    const blob = ev.data, token = vid.token, v = vid;
+    v.pending = v.pending.then(async () => {
+      if (v.failed) return;
+      try {
+        const ok = await pywebview.api.video_chunk(token, await blobBase64(blob));
+        if (!ok) throw new Error("Coralis no aceptó un trozo del video");
+      } catch (e) {
+        v.failed = e && e.message ? e.message : String(e);   // stop, and say so (never hang)
+        if (!v.stopping) { v.stopping = true; try { v.rec.stop(); } catch (x) { finishVideo(); } }
+      }
+    });
+  };
+  vid.rec.onstop = finishVideo;
+  vid.rec.start(1000);
+  show("vidBox", true); $("plVideo").disabled = true; $("plPlay").disabled = true; $("plSave").disabled = true;
+  const total = vid.endAt - vid.startAt;
+  const frame = () => {
+    if (!vid || vid.stopping) return;
+    const now = ctx.currentTime;
+    drawVideo(now);
+    $("vidMsg").textContent = `Grabando el video… ${fmtTime(now - vid.startAt)} de ${fmtTime(total)}. Deja esta ventana a la vista.`;
+    if (now >= vid.endAt) { vid.stopping = true; vid.rec.stop(); return; }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+function blobBase64(blob) {
+  // the data after «base64,» (the type may itself carry commas: «video/mp4;codecs=avc1…,mp4a…»)
+  return new Promise((ok, fail) => {
+    const fr = new FileReader();
+    fr.onload = () => { const r = String(fr.result); ok(r.slice(r.indexOf("base64,") + 7)); };
+    fr.onerror = () => fail(fr.error || new Error("no se pudo leer el video"));
+    fr.readAsDataURL(blob);
+  });
+}
+function vid_canCapture() { return !!($("vidCanvas").captureStream); }
+function fmtTime(s) { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+async function finishVideo() {
+  if (!vid) return;
+  const v = vid;
+  if (v.cancelled) { await v.pending; pywebview.api.video_cancel(v.token); endVideoUI("Video cancelado."); return; }
+  $("vidMsg").textContent = "Guardando el video…";
+  await v.pending;
+  if (v.failed) { pywebview.api.video_cancel(v.token); endVideoUI("No se pudo grabar el video: " + v.failed); return; }
+  const r = await pywebview.api.video_end(v.token, pl.run_dir, `${pl.data.title} - ${v.subtitle}`, v.ext);
+  endVideoUI(r && r.ok ? `✓ Video guardado: ${r.path}` : (r && r.error) || "No se guardó el video.");
+}
+function endVideoUI(msg) {
+  if (vid) { for (const s of vid.g.sources) { try { s.stop(); } catch (e) { /* done */ } } }
+  vid = null;
+  $("plVideo").disabled = false; $("plPlay").disabled = false; $("plSave").disabled = false;
+  $("vidMsg").textContent = msg;
+  setTimeout(() => { if (!vid) show("vidBox", false); }, 8000);
+  $("plLoad").textContent = msg;
+}
+function cancelVideo() {
+  if (!vid) return;
+  vid.cancelled = true; vid.stopping = true;
+  try { vid.rec.stop(); } catch (e) { finishVideo(); }
 }
 async function chooseVoice(runDir) {
   const names = await pywebview.api.voice_names();
@@ -1624,6 +1879,7 @@ async function downloadVoice(runDir, voice) {
   else if (r && r.error) alert(r.error);
 }
 function closePlayer() {
+  if (vid) { if (!confirm("Se está grabando un video. ¿Cancelarlo y salir?")) return; cancelVideo(); }
   stopPlay(); show("player", false); show("home", true);
 }
 
@@ -1861,6 +2117,8 @@ window.addEventListener("pywebviewready", async () => {
   $("plPlay").addEventListener("click", () => play());
   $("plStop").addEventListener("click", stopPlay);
   $("plSave").addEventListener("click", () => downloadAudio(null));
+  $("plVideo").addEventListener("click", createVideo);
+  $("vidCancel").addEventListener("click", cancelVideo);
   $("plBar").addEventListener("click", seekBar);
   // the tempo changes when the number is confirmed (Enter, or leaving the box), not at every keystroke
   $("plTempo").addEventListener("change", () => setTempo(tempoValue()));
