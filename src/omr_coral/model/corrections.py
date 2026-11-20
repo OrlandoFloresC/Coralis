@@ -128,3 +128,94 @@ def apply_voices(cs: ChoralScore, data: dict) -> set[int]:
                 a["chosen"] = a is alt
             decided.add(m.index)
     return decided
+
+
+# --------------------------------------------------------------------------- notes fixed by hand
+#
+#   {"edits": {"12": {"alto": {"3/2": "B-4", "2": {"pitch": "C5", "tie": true}}}}}
+#
+# The pitch the user gave to the note that starts at that offset (in quarter notes) of that
+# voice, and optionally whether it is tied to the next note (a tie the engines missed, or one
+# they invented). The rhythm is the one of the version in place; a note tied into the next
+# measure takes its continuation along.
+
+_PITCH = __import__("re").compile(r"^[A-G](#{1,2}|-{1,2})?\d$")
+
+
+def apply_edits(cs: ChoralScore, data: dict) -> set[int]:
+    """Put the pitches fixed by hand in place. Returns the measures edited."""
+    from music21 import pitch as m21pitch
+
+    edited = set()
+    ms = cs.measures
+    by_index = {m.index: k for k, m in enumerate(ms)}
+    for key, per_voice in (data.get("edits") or {}).items():
+        try:
+            k = by_index[int(key)]
+        except (KeyError, ValueError):
+            continue
+        m = ms[k]
+        for v, notes in (per_voice or {}).items():
+            for off, value in (notes or {}).items():
+                name, tie = (value.get("pitch"), value.get("tie")) if isinstance(value, dict) else (value, None)
+                if not isinstance(name, str) or not _PITCH.match(name):
+                    continue
+                try:
+                    offset = Fraction(off)
+                except (ValueError, ZeroDivisionError):
+                    continue
+                e = next((e for e in m.voices.get(v, []) if e.offset == offset and not e.is_rest), None)
+                if e is None:
+                    continue  # the rhythm changed since: that note is gone
+                old = e.pitch
+                _set_pitch(e, m21pitch.Pitch(name))
+                edited.add(m.index)
+                # a note tied across the barline: its continuation sounds the same
+                j, cur = k, e
+                while cur.tie in ("start", "continue") and j + 1 < len(ms):
+                    j += 1
+                    nxt = next((x for x in ms[j].voices.get(v, []) if not x.is_rest), None)
+                    if nxt is None or nxt.offset != 0 or nxt.pitch != old or nxt.tie not in ("stop", "continue"):
+                        break
+                    _set_pitch(nxt, m21pitch.Pitch(name))
+                    cur = nxt
+                if isinstance(tie, bool):
+                    _set_tie(ms, k, v, e, tie)
+    return edited
+
+
+def _next_note(ms, k: int, v: str, e: Event):
+    """The note right after e in this voice: later in the measure, or opening the next one."""
+    later = [x for x in ms[k].voices.get(v, []) if x.offset > e.offset]
+    if later:
+        return later[0] if not later[0].is_rest else None
+    if k + 1 < len(ms):
+        first = next(iter(ms[k + 1].voices.get(v, [])), None)
+        if first is not None and first.offset == 0 and not first.is_rest:
+            return first
+    return None
+
+
+def _set_tie(ms, k: int, v: str, e: Event, tied: bool) -> None:
+    """Tie e to the next note (only to the same pitch: a tie joins one sound) or untie it."""
+    has = e.tie in ("start", "continue")
+    if tied == has:
+        return
+    nxt = _next_note(ms, k, v, e)
+    if tied:
+        if nxt is None or nxt.pitch != e.pitch:
+            return
+        e.tie = "continue" if e.tie == "stop" else "start"
+        nxt.tie = "continue" if nxt.tie == "start" else "stop"
+        nxt.lyrics = {}  # a tied note is not sung again: no syllable of its own
+    else:
+        e.tie = "stop" if e.tie == "continue" else None
+        if nxt is not None and nxt.tie in ("stop", "continue"):
+            nxt.tie = "start" if nxt.tie == "continue" else None
+
+
+def _set_pitch(e: Event, p) -> None:
+    e.pitch = p.nameWithOctave
+    e.midi = int(p.midi)
+    e.step = p.step
+    e.alter = float(p.accidental.alter) if p.accidental else 0.0

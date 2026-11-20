@@ -199,5 +199,13 @@ Coralis usa estos programas libres, que se descargan aparte desde sus páginas o
 - [music21](https://github.com/cuthbertLab/music21), [Verovio](https://github.com/rism-digital/verovio),
   [pywebview](https://github.com/r0x0r/pywebview), OpenCV, Pillow y otras bibliotecas de Python.
 
+El sonido de piano del reproductor es el **Salamander Grand Piano** (un Yamaha C5 grabado) de
+**Alexander Holm**, en la versión que distribuye [Tone.js](https://github.com/Tonejs/audio/tree/master/salamander),
+bajo licencia [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
+Va incluido en `src/omr_coral/gui/piano.js`.
+
+Para guardar el audio en mp3 se usa [lamejs](https://github.com/zhuker/lamejs) (un port de LAME a JavaScript),
+bajo licencia GNU LGPL 3.0, incluido en `src/omr_coral/gui/lame.min.js`.
+
 **Respeta los derechos de autor de las partituras que conviertas.** Coralis no incluye partituras;
 las pruebas usan solo ejemplos de dominio público.

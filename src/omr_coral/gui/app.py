@@ -202,12 +202,158 @@ class Api:
         if not (run / "versiones.json").exists():
             validate_run(run, self._cfg)
         measures = json.loads((run / "versiones.json").read_text(encoding="utf-8"))
+        if not (run / "notas.json").exists():
+            validate_run(run, self._cfg)
+        keys = {m["index"]: m["key"] for m in json.loads((run / "notas.json").read_text(encoding="utf-8"))}
         for m in measures:
             m["thumb"] = _thumb(run / m.pop("crop"), width=760)
+            m["key"] = keys.get(m["index"], 0)
         return {"title": self._summary(run)["title"], "measures": measures,
                 "saved": corrections.load(run).get("voices", {})}
 
-    def save_notes(self, run_dir: str, choices: dict) -> dict:
+    def _measure_meta(self, run: Path, index: int) -> dict | None:
+        p = run / "notas.json"
+        if not p.exists():
+            from ..pipeline import validate_run
+            validate_run(run, self._cfg)
+        return next((m for m in json.loads(p.read_text(encoding="utf-8")) if m["index"] == index), None)
+
+    def _render(self, meta: dict, voice: str, events: list) -> str | None:
+        """One voice of one measure drawn on its own staff, from the window's note list."""
+        from fractions import Fraction
+        from types import SimpleNamespace
+
+        from ..model.score import Event
+        from ..output.render import render_voice_svg
+
+        m = SimpleNamespace(number=meta["number"], key_fifths=meta["key"], time=tuple(meta["time"]),
+                            pickup=meta["pickup"], bar_length=Fraction(meta["bar_length"]),
+                            duration=Fraction(meta["duration"]))
+        evs = [Event(Fraction(e["offset"]), Fraction(e["duration"]), e.get("pitch"), tie=e.get("tie"),
+                     filled=bool(e.get("filled"))) for e in events]
+        try:
+            return render_voice_svg(m, voice, evs, self._cfg)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            return None
+
+    def render_voice(self, run_dir: str, index: int, voice: str, events: list) -> str | None:
+        meta = self._measure_meta(Path(run_dir), int(index))
+        return self._render(meta, voice, events) if meta else None
+
+    def measure_data(self, run_dir: str, label: str) -> dict:
+        """Any measure, by the number the user sees (for «Ir al compás…»)."""
+        run = Path(run_dir)
+        if not (run / "notas.json").exists():
+            from ..pipeline import validate_run
+            validate_run(run, self._cfg)
+        all_ = json.loads((run / "notas.json").read_text(encoding="utf-8"))
+        meta = next((m for m in all_ if str(m["label"]).lower() == str(label).strip().lower()), None)
+        if meta is None:
+            return {"ok": False, "error": f"No hay un compás «{label}» (van del {all_[0]['label']} al {all_[-1]['label']})."}
+        names = self._cfg["output"]["parts"]
+        voices = {}
+        for v, evs in meta["voices"].items():
+            if not any(e.get("pitch") for e in evs):
+                continue
+            voices[v] = {"name": names[v]["name"], "options": [{
+                "key": "current", "votes": 0, "total": 0, "chosen": True, "events": evs,
+                "svg": self._render(meta, v, evs), "desc": ""}]}
+        crop = run / meta["crop"]
+        return {"ok": True, "measure": {"index": meta["index"], "label": meta["label"], "voices": voices,
+                                        "key": meta["key"],
+                                        "thumb": _thumb(crop, width=760) if crop.exists() else None,
+                                        "single": True}}
+
+    def playback_data(self, run_dir: str) -> dict:
+        """The file for practice, ready to play: per voice, its notes in quarter notes from the
+        start (tied notes joined into one sound), with the words; and every measure's start."""
+        from ..model.score import VOICES, build_choral_score
+        from ..pipeline import final_file
+
+        run = Path(run_dir)
+        path = final_file(run)
+        if path is None:
+            return {"ok": False, "error": "Todavía no hay partitura para escuchar."}
+        cs = build_choral_score(path)
+        names = self._cfg["output"]["parts"]
+        measures, voices = [], {v: [] for v in VOICES}
+        words = {v: [] for v in VOICES}
+        t = 0.0
+        tempo = None
+        for m in cs.measures:
+            length = float(m.bar_length)
+            measures.append({"start": t, "length": length, "time": list(m.time), "number": m.number})
+            for st in m.staves:
+                tempo = tempo or st.tempo
+            for v in VOICES:
+                notes = voices[v]
+                for e in m.voices.get(v, []):
+                    if e.is_rest or e.midi is None:
+                        continue
+                    start = t + float(e.offset)
+                    if e.tie in ("stop", "continue") and notes and notes[-1]["midi"] == e.midi \
+                            and abs(notes[-1]["start"] + notes[-1]["dur"] - start) < 1e-6:
+                        notes[-1]["dur"] += float(e.duration)  # one sound across the tie
+                    else:
+                        notes.append({"start": start, "dur": float(e.duration), "midi": e.midi})
+                    if 1 in e.lyrics:
+                        words[v].append({"start": start, "text": e.lyrics[1][0], "syl": e.lyrics[1][1]})
+            t += length
+        return {"ok": True, "title": self._summary(run)["title"], "tempo": tempo, "measures": measures,
+                "voices": [{"id": v, "name": names[v]["name"], "notes": voices[v], "words": words[v]}
+                           for v in VOICES]}
+
+    def voice_names(self) -> list[dict]:
+        from ..model.score import VOICES
+
+        return [{"id": v, "name": self._cfg["output"]["parts"][v]["name"]} for v in VOICES]
+
+    def export_voice(self, run_dir: str, voice: str) -> dict:
+        """A MusicXML with one voice only (with its words, every stanza), where the user says."""
+        from ..model.export import to_music21
+        from ..model.score import VOICES, build_choral_score
+        from ..pipeline import final_file
+
+        if voice not in VOICES:
+            return {"ok": False, "error": "Esa voz no existe."}
+        run = Path(run_dir)
+        path = final_file(run)
+        if path is None:
+            return {"ok": False, "error": "Todavía no hay partitura."}
+        name = self._cfg["output"]["parts"][voice]["name"]
+        default = f"{path.stem} - {name}.musicxml"
+        res = self._window.create_file_dialog(webview.FileDialog.SAVE, directory=str(run.parent),
+                                              save_filename=default, file_types=("MusicXML (*.musicxml)",))
+        if not res:
+            return {"ok": False}
+        dest = Path(res if isinstance(res, str) else res[0])
+        if dest.suffix.lower() not in (".musicxml", ".xml"):
+            dest = dest.with_suffix(".musicxml")
+        score = to_music21(build_choral_score(path), self._cfg)
+        for part in list(score.parts):
+            if part.id != voice:
+                score.remove(part)
+        score.write("musicxml", fp=str(dest))
+        return {"ok": True, "path": str(dest)}
+
+    def save_audio(self, run_dir: str, name: str, data_b64: str) -> dict:
+        """Save the mp3 the window rendered, where the user says."""
+        import base64
+        import re
+
+        safe = re.sub(r'[\\/:*?"<>|]+', " ", name).strip() or "audio.mp3"
+        res = self._window.create_file_dialog(webview.FileDialog.SAVE, directory=str(Path(run_dir).parent),
+                                              save_filename=safe, file_types=("Audio MP3 (*.mp3)",))
+        if not res:
+            return {"ok": False, "error": "No se guardó (cancelado)."}
+        dest = Path(res if isinstance(res, str) else res[0])
+        if dest.suffix.lower() != ".mp3":
+            dest = dest.with_suffix(".mp3")
+        dest.write_bytes(base64.b64decode(data_b64))
+        return {"ok": True, "path": str(dest)}
+
+    def save_notes(self, run_dir: str, choices: dict, edits: dict | None = None) -> dict:
         from ..model import corrections
 
         if self._busy:
@@ -217,6 +363,15 @@ class Api:
         voices = data.setdefault("voices", {})
         for key, per_voice in (choices or {}).items():
             voices.setdefault(str(key), {}).update(per_voice)
+        fixed = data.setdefault("edits", {})
+        for key, per_voice in (edits or {}).items():
+            for v, notes in per_voice.items():
+                if notes:
+                    fixed.setdefault(str(key), {})[v] = notes
+                else:  # back to the notes of the readings
+                    fixed.get(str(key), {}).pop(v, None)
+            if not fixed.get(str(key)):
+                fixed.pop(str(key), None)
         corrections.save(run, data)
         self._busy = True
         threading.Thread(target=self._revalidate, args=(run, "onNotesDone"), daemon=True).start()

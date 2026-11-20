@@ -228,7 +228,7 @@ def _describe(events) -> str:
     return " · ".join(parts) or "solo silencio"
 
 
-def _write_versions(run_dir: Path, voted, doubtful: list[int], cfg: dict) -> None:
+def _write_versions(run_dir: Path, voted, doubtful: list[int], cfg: dict, edits: dict | None = None) -> None:
     """For the review window: in each doubtful measure, every version the readings gave of each
     disputed voice, drawn on its own staff, with how many readings saw it."""
     from .model.score import VOICES
@@ -240,11 +240,20 @@ def _write_versions(run_dir: Path, voted, doubtful: list[int], cfg: dict) -> Non
         m = voted.measures[k]
         voices = {}
         for v in VOICES:
-            alts = m.alternatives.get(v, [])
-            if len(alts) < 2:
-                continue
+            alts = m.alternatives.get(v, []) or [{"events": m.voices.get(v, []), "weight": 1, "sources": []}]
+            if not any(not e.is_rest for a in alts for e in a["events"]):
+                continue  # this voice rests: nothing to choose or fix
             current = corrections.version_key(m.voices.get(v, []))
             options = []
+            fixed = ((edits or {}).get(str(m.index)) or {}).get(v)
+            if fixed:  # the user fixed pitches by hand: that is what stands now
+                try:
+                    svg = render_voice_svg(m, v, m.voices.get(v, []), cfg)
+                except Exception:  # noqa: BLE001
+                    svg = None
+                options.append({"key": current, "votes": 0, "total": 0, "readings": [], "svg": svg,
+                                "chosen": True, "edited": True, "edits": fixed,
+                                "desc": _describe(m.voices.get(v, [])), "events": _events_json(m.voices.get(v, []))})
             for a in sorted(alts, key=lambda a: -a["weight"]):
                 try:
                     svg = render_voice_svg(m, v, a["events"], cfg)
@@ -252,13 +261,30 @@ def _write_versions(run_dir: Path, voted, doubtful: list[int], cfg: dict) -> Non
                     svg = None
                 vk = corrections.version_key(a["events"])
                 options.append({"key": vk, "votes": a["weight"], "total": sum(x["weight"] for x in alts),
-                                "readings": a["sources"], "svg": svg, "chosen": vk == current,
-                                "desc": _describe(a["events"])})
+                                "readings": a["sources"], "svg": svg, "chosen": vk == current and not fixed,
+                                "base": bool(fixed) and a.get("chosen", False),
+                                "desc": _describe(a["events"]), "events": _events_json(a["events"])})
             voices[v] = {"name": names[v]["name"], "options": options}
         if voices:
             out.append({"index": m.index, "label": m.label, "crop": f"report/img/m{m.index:03d}.png",
                         "voices": voices})
     (run_dir / "versiones.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+
+
+def _events_json(events) -> list[dict]:
+    return [{"offset": str(e.offset), "duration": str(e.duration), "pitch": e.pitch, "tie": e.tie,
+             "filled": e.filled} for e in events]
+
+
+def _write_notes(run_dir: Path, voted) -> None:
+    """Every measure as it stands (for «Ir al compás…» and the note editor of the window)."""
+    from .model.score import VOICES
+
+    out = [{"index": m.index, "label": m.label, "number": m.number, "time": list(m.time),
+            "key": m.key_fifths, "pickup": m.pickup, "bar_length": str(m.bar_length),
+            "duration": str(m.duration), "crop": f"report/img/m{m.index:03d}.png",
+            "voices": {v: _events_json(m.voices.get(v, [])) for v in VOICES}} for m in voted.measures]
+    (run_dir / "notas.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
 
 
 def validate_run(run_dir: Path, cfg: dict) -> dict:
@@ -274,6 +300,7 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     fix_endings(voted)  # an ending marked "1.-6." by hand: the rest of it, and the next one is the 7th
     # notes chosen by the user: no longer "readings disagree" / "does not match the image"
     decided = corrections.apply_voices(voted, answers)
+    decided |= corrections.apply_edits(voted, answers)  # pitches fixed by hand, after the version chosen
     vote_issues = [i for i in vote_issues if not (i.measure in decided and i.rule in ("votacion", "sintesis"))]
     if split_part_lines(voted):
         vote_issues.append(Issue("estructura", "info",
@@ -313,7 +340,9 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     (run_dir / "votacion.json").write_text(json.dumps(details, indent=2, ensure_ascii=False), encoding="utf-8")
 
     doubtful = sorted({i.measure for i in issues if i.severity != "info" and i.measure is not None})
-    _write_versions(run_dir, voted, sorted(set(doubtful) | decided), cfg)  # decided: can be changed again
+    _write_versions(run_dir, voted, sorted(set(doubtful) | decided), cfg,  # decided: can be changed again
+                    answers.get("edits"))
+    _write_notes(run_dir, voted)
     result = {
         "readings": [c.label for c in cands],
         "measures": len(voted.measures),

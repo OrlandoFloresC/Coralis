@@ -68,3 +68,49 @@ def test_voices_ordered_by_stems_not_pitch():
     up = [raw(0, 1, "A-3", "up", "6"), raw(1, 1, "A-2", "up", "6")]
     down = [raw(0, 1, "A-3", "down", "7"), raw(1, 1, "A-3", "down", "7")]
     assert _order_layers([up, down])[0] is down
+
+
+def test_pitch_fixed_by_hand_follows_its_tie():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.corrections import apply_edits
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    def m(i, evs):
+        x = Measure(index=i, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4))
+        x.voices = {v: [] for v in VOICES}
+        x.voices["alto"] = evs
+        return x
+
+    ms = [m(0, [Event(Fr(0), Fr(2), "C4"), Event(Fr(2), Fr(2), "B3", tie="start")]),
+          m(1, [Event(Fr(0), Fr(4), "B3", tie="stop")])]
+    cs = ChoralScore(Path("x"), ms, [])
+    assert apply_edits(cs, {"edits": {"0": {"alto": {"2": "B-3", "9": "C4"}, "tenor": {"0": "Z9"}}}}) == {0}
+    assert ms[0].voices["alto"][1].pitch == "B-3" and ms[0].voices["alto"][1].alter == -1.0
+    assert ms[1].voices["alto"][0].pitch == "B-3"     # the tied note goes along
+    assert ms[0].voices["alto"][0].pitch == "C4"
+
+
+def test_tie_added_and_removed_by_hand():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.corrections import apply_edits
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    def m(i, evs):
+        x = Measure(index=i, system=1, page=None, staves=[], time=(4, 4), bar_length=Fr(4), duration=Fr(4))
+        x.voices = {v: [] for v in VOICES}
+        x.voices["tenor"] = evs
+        return x
+
+    ms = [m(0, [Event(Fr(0), Fr(2), "C4"), Event(Fr(2), Fr(2), "D4")]),
+          m(1, [Event(Fr(0), Fr(2), "D4", lyrics={1: ("la", "single")}), Event(Fr(2), Fr(2), "E4")])]
+    cs = ChoralScore(Path("x"), ms, [])
+    apply_edits(cs, {"edits": {"0": {"tenor": {"2": {"pitch": "D4", "tie": True}, "0": {"pitch": "C4", "tie": True}}}}})
+    assert ms[0].voices["tenor"][1].tie == "start" and ms[1].voices["tenor"][0].tie == "stop"
+    assert ms[1].voices["tenor"][0].lyrics == {}
+    assert ms[0].voices["tenor"][0].tie is None      # C4 → D4: not the same sound, no tie
+    apply_edits(cs, {"edits": {"0": {"tenor": {"2": {"pitch": "D4", "tie": False}}}}})
+    assert ms[0].voices["tenor"][1].tie is None and ms[1].voices["tenor"][0].tie is None
