@@ -6,6 +6,25 @@ Lo nuevo de cada versión. La guía completa de uso está en [GUIA.md](https://g
 > dudosos para que los revises. Compara siempre el resultado con la partitura impresa: la decisión final la
 > tienes tú.
 
+## 0.9.0 — noviembre de 2026
+
+- Editor: la figura con el teclado, como en MuseScore pero con ⌥ (Alt en Windows): ⌥7 redonda, ⌥6 blanca,
+  ⌥5 negra, ⌥4 corchea, ⌥3 semicorchea y ⌥. el puntillo. Funciona también mientras escribes la letra.
+- Un solo botón **«⬇ Guardar…»** en «Escuchar» para todo: audio, video, PDF, partitura o MIDI, de las 4 voces, de
+  una voz destacada o sola, o de cada voz en su propio archivo (ahora también PDF, partitura y MIDI de cada voz de una vez).
+- La lista de himnos, más limpia: «▶ Escuchar», «✎ Editar» y un menú «Abrir ▾» (para practicar, copia digital,
+  reporte, carpeta).
+- En el editor, «⌨ Atajos» muestra la tabla de teclas al día.
+- Se quitó la pantalla vieja «Revisar notas» (ya no se podía abrir; todo eso lo hace «✎ Editar»).
+- En Mac, los menús de arriba en español («Edición», «Visualización», «Salir de Coralis»…).
+- «Letra como texto» muestra la letra leída con guiones entre sílabas, como en el himnario: se ve qué va en cada
+  nota y dónde falta un espacio («fuer-te-nues-tro» → «fuer-te nues-tro»). Lo que no corriges se queda en sus notas.
+- **Los signos en el editor:** en el panel «Compás», las repeticiones, segno, coda, Fine, saltos (D.S./D.C.),
+  casillas y silencios de varios compases, junto con todo lo demás (con deshacer). «𝄋 Signos» queda como vista
+  de todo el himno.
+- **Guardar igual en todas partes:** en «𝄋 Signos» y en «Letra como texto», como en el editor, «Guardar» guarda al
+  momento y «Rehacer partitura» rehace (o se rehace sola al abrir, escuchar o descargar).
+
 ## 0.8.0 — noviembre de 2026
 
 **Para ensayar («▶ Escuchar»)**

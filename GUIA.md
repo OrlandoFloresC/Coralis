@@ -64,17 +64,18 @@ atrás, Coralis intenta limpiarla.
 ## 3. Los himnos convertidos
 
 A la derecha (o abajo en una ventana pequeña) está la lista **«Himnos convertidos»**. Cada himno dice
-cuántos compases quedaron dudosos y tiene estos botones:
+cuántos compases quedaron dudosos y tiene tres botones:
 
-| Botón | Qué hace |
-|---|---|
-| **Para practicar** | Abre el archivo de 4 voces (MusicXML) en MuseScore o en tu programa de partituras: las estrofas van una tras otra y las repeticiones desplegadas, como para la app de solfeo. |
-| **▶ Escuchar** | Toca el himno con piano y metrónomo, con la partitura a la vista (ver [4](#4-escuchar-y-ensayar)). |
-| **⬇ Una voz** | Guarda un MusicXML con una sola voz y su letra. |
-| **✎ Editar** | Corrige notas, ritmo, letra, compases y signos viendo la imagen original (ver [6](#6-editar-corregir-todo-compás-por-compás)). |
-| **Copia digital** | Abre la versión en 2 pentagramas como el original, con sus repeticiones y signos. |
-| **Reporte** | Abre el reporte: cada compás con su imagen, lo que entendió Coralis y por qué es dudoso. |
-| **Carpeta** | Abre la carpeta del himno, donde se guarda todo. |
+- **▶ Escuchar:** lo toca con piano y metrónomo, con la partitura a la vista, y desde ahí guardas audio,
+  video, PDF, partitura o MIDI (ver [4](#4-escuchar-y-ensayar) y [5](#5-guardar-audio-video-midi-pdf-y-partituras)).
+- **✎ Editar:** corrige notas, ritmo, letra, compases y signos viendo la imagen original
+  (ver [6](#6-editar-corregir-todo-compás-por-compás)).
+- **Abrir ▾:** un menú con
+  - **Para practicar:** el archivo de 4 voces (MusicXML) en MuseScore o tu programa de partituras, con las
+    estrofas una tras otra y las repeticiones desplegadas, como para la app de solfeo;
+  - **Copia digital:** la versión en 2 pentagramas como el original, con sus repeticiones y signos;
+  - **Reporte:** cada compás con su imagen, lo que entendió Coralis y por qué es dudoso;
+  - **Carpeta del himno:** donde se guarda todo.
 
 Si guardaste cambios en el editor sin rehacer la partitura, el himno dice «cambios sin rehacer»; se rehace
 solo antes de abrirlo, escucharlo o descargar algo.
@@ -100,35 +101,34 @@ En **«Voces»**, cada voz tiene:
 - **Volumen**, **Destacar** (tu voz fuerte y las demás suaves) y **Sola** (solo esa voz).
 - **Lado** (izquierda o derecha, con audífonos). **«🎧 Mi voz a la izquierda, las demás a la derecha»**
   usa la voz destacada; **«Todas al centro»** lo regresa.
-- **⬇ Audio**, **🎬 Video** y **⬇ Partitura** de esa voz sola.
 
 Arriba se ve la letra de la voz destacada (o de la soprano) mientras suena.
 
 ## 5. Guardar audio, video, MIDI, PDF y partituras
 
-Todo se guarda **tal como suena o se ve ahora** (voces, volúmenes, lados, tono, velocidad, metrónomo) en la
-carpeta del himno, sin preguntar dónde. Coralis dice el nombre del archivo y ofrece **«Abrir carpeta»**.
+En «Escuchar», el botón **«⬇ Guardar…»** pregunta dos cosas:
 
-| Botón | Qué guarda |
-|---|---|
-| **⬇ Descargar audio** | Un mp3: las 4 voces, tu voz destacada o una voz sola (según lo que tengas puesto). |
-| **🎬 Crear video** | Un video con la letra tipo karaoke (ver abajo). |
-| **⬇ MIDI** | Un MIDI con una pista por voz, en el tono y la velocidad elegidos. Con «Sola», solo esa voz. |
-| **⬇ Partitura en este tono** | El MusicXML de las 4 voces en el tono elegido. Con «Sola», solo esa voz. |
-| **⬇ PDF** | La partitura en hojas A4 para imprimir, en el tono elegido. Con «Sola», solo esa voz. |
+- **Qué:** audio (mp3), video con la letra, PDF para imprimir, partitura (MusicXML, para MuseScore o la app de
+  solfeo) o MIDI.
+- **De quién:**
+  - para audio y video: **como suena ahora**, **las 4 voces por igual**, **una voz destacada** (las demás
+    suaves), **una voz sola**, o **cada voz** (destacada o sola) en su propio archivo, para mandarle a cada
+    cantante el suyo;
+  - para PDF, partitura y MIDI: **las 4 voces**, **solo una voz** o **cada voz en su propio archivo**.
+
+Todo sale con el **tono, la velocidad y el metrónomo** que tengas puestos, y se guarda en la carpeta del himno
+sin preguntar dónde. Coralis dice el nombre del archivo y ofrece **«Abrir carpeta»**. Los nombres dicen qué son:
+«Castillo Fuerte - Alto (2 semitonos más alto).pdf», «Castillo Fuerte - Bajo destacada.mp3».
 
 **El video** se graba en tiempo real (tarda lo que dura el himno; deja la ventana a la vista). Lleva el
 título, un compás de cuenta antes de cada estrofa, la letra escrita como en la partitura
 («Sal - va - dor») con lo cantado en color, una rayita por cada tiempo que dura cada sílaba, y el compás
-«1 2 3 4» arriba. Antes de grabar puedes elegir:
+«1 2 3 4» arriba. Después de «Siguiente…» eliges:
 
-- **Qué grabar:** un video tal como suena, o **un video por cada voz** (destacada o sola), para mandarle a
-  cada cantante el suyo.
 - **Nombre del coro o de la iglesia** (va en el título y al pie) y los **colores**.
 - **Mostrar el pentagrama** de la voz, con la nota que suena marcada.
 - **La letra de las otras voces** cuando cantan otra cosa (por ejemplo, los hombres respondiendo).
 
-Los nombres de archivo dicen qué son: «Castillo Fuerte - Alto (2 semitonos más alto).pdf».
 
 ## 6. Editar: corregir todo, compás por compás
 
@@ -171,27 +171,37 @@ si escribes ahí, esa voz canta su propia letra (por ejemplo, los hombres respon
   compás**). Con otra armadura, las notas sin alteración propia se ajustan a ella. **«Volver a lo leído»**
   quita tu cambio.
 - **⧉ Copiar este compás** y, en otro compás que dure lo mismo, **📋 Pegar las 4 voces** o **pegar solo una**.
+- **Signos de este compás:** barras de repetición (𝄆 𝄇), segno, coda, «a la Coda», Fine, salto al final del
+  compás (D.S., D.C. …), casilla (1.ª, 2.ª, o «1.-6.») y silencio de varios compases. Los signos del compás se
+  ven junto a «Compás N». Se guardan con «Guardar» como todo lo demás, y también se deshacen con ↶.
 
-**Guardar:** **«Guardar»** guarda al momento tus cambios. **«Rehacer partitura»** rehace el archivo para
-practicar, la copia digital y lo demás con tus cambios (unos segundos). Si se te olvida, se rehace sola antes
-de abrir, escuchar o descargar. Agregar o borrar compases y cambiar la cifra o la armadura rehacen la
+**Guardar** (igual en el editor, en «𝄋 Signos» y en «Letra como texto»): **«Guardar»** guarda al momento tus
+cambios. **«Rehacer partitura»** rehace el archivo para practicar, la copia digital y lo demás con tus cambios
+(unos segundos). Si se te olvida, se rehace sola antes de abrir, escuchar o descargar. Agregar o borrar compases y cambiar la cifra o la armadura rehacen la
 partitura enseguida.
 
 ## 7. Signos, letra como texto y nombres de las voces
 
 En la parte de arriba del editor:
 
-- **𝄋 Signos:** todos los compases en miniatura; haz clic en uno para marcar o quitar segno, coda,
+- **𝄋 Signos:** la vista de todo el himno (los signos de un compás también se ponen en el panel «Compás» del
+  editor). Todos los compases en miniatura; haz clic en uno para marcar o quitar segno, coda,
   repeticiones (|: :|), casillas (1.ª, 2.ª, o «1.-6.»), D.S./D.C., Fine y silencios de varios compases. Con eso
   Coralis despliega las repeticiones en el archivo para practicar. Lo que los programas no ven (el segno y la
   coda casi nunca) lo marcas aquí.
-- **Letra como texto:** toda la letra en párrafos, para corregirla de corrido o pegar la letra correcta.
-  «Volver a la letra leída» deshace ese texto.
+- **Letra como texto:** toda la letra en párrafos, para corregirla de corrido o pegar la letra correcta. La letra
+  que leyó el programa aparece con guiones entre sílabas, como en el himnario («Cas-ti-llo fuer-te»), para que veas
+  qué va en cada nota. Corrige solo lo que está mal: lo que no toques se queda en sus notas y sirve de referencia
+  para acomodar lo demás. Si dos palabras salen unidas («fuer-te-nues-tro»), pon el espacio («fuer-te nues-tro»).
+  La palabra corregida debe tener las mismas sílabas que notas tiene.
+  «Volver a la letra leída» deshace ese texto. Se guarda igual que en el editor: «Guardar» y «Rehacer partitura».
 - **Nombres de las voces:** cómo se llaman las voces de este himno (por ejemplo, «Cuarteto de hombres»: Primer
   tenor, Segundo tenor, Barítono, Bajo). Se usan en la partitura, al escuchar, en los videos y en los nombres de
   los archivos.
 
 ## 8. Atajos de teclado
+
+En el editor, el botón **«⌨ Atajos»** muestra esta misma tabla.
 
 En Windows, **Ctrl** en lugar de ⌘ y **Alt** en lugar de ⌥.
 
@@ -201,6 +211,8 @@ En Windows, **Ctrl** en lugar de ⌘ y **Alt** en lugar de ⌥.
 |---|---|
 | ↑ ↓ | Subir / bajar la nota un grado |
 | ⌥← ⌥→ | Mover la nota antes / después |
+| ⌥7 ⌥6 ⌥5 ⌥4 ⌥3 | Redonda, blanca, negra, corchea, semicorchea (también mientras escribes la letra) |
+| ⌥. | Poner o quitar el puntillo |
 | ⌘⌫ | Borrar la nota (queda un silencio) |
 | N o Intro (en un silencio) | Poner una nota ahí |
 | ⌘Z / ⌘⇧Z | Deshacer / rehacer |

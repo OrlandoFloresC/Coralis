@@ -54,11 +54,8 @@
     #home .home-left { position: sticky; top: 10px; }
     .pl-now { font-size: clamp(22px, 2.2vw, 34px); }
     .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-    .nt-card img.orig { max-height: 34vh; }
-    .nt-opt svg { max-height: 18vh; }
     #lyText { min-height: 70vh !important; font-size: 17px !important; }
-    #rvEdit, #voiceDlg { width: min(720px, 80vw); }
-    #ntEditor { width: min(1100px, 85vw) !important; max-width: none !important; }
+    #rvEdit { width: min(720px, 80vw); }
   }
   @media (min-width: 1600px) {
     ul.hist { display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); column-gap: 24px; }
@@ -162,17 +159,6 @@
   .warnbox { background: var(--warn-soft); color: var(--warn); border-radius: 9px; padding: 10px 12px; margin-top: 12px;
     font-size: 14px; }
   .warnbox a { color: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
-  .nt-card img.orig { display: block; max-width: 100%; max-height: 240px; width: auto; margin: 0 auto;
-    border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-  .nt-opt .desc { font-size: 12px; color: #1f2328; margin: 2px 0 4px; line-height: 1.35; }
-  .nt-voice { margin-top: 12px; }
-  .nt-voice h3 { font-size: 14px; margin: 0 0 6px; }
-  .nt-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-  .nt-opt { border: 2px solid var(--line); border-radius: 10px; padding: 6px; cursor: pointer; background: #fff; color: #1f2328; }
-  .nt-opt:hover { border-color: var(--accent); }
-  .nt-opt.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .nt-opt svg { width: 100%; height: auto; max-height: 120px; }
-  .nt-opt .cap { font-size: 12px; color: #6b6f76; display: flex; justify-content: space-between; }
   .pl-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 12px; }
   .pl-controls label { display: flex; align-items: center; gap: 6px; }
   .pl-controls input[type=number] { width: 64px; padding: 5px 6px; border-radius: 8px; border: 1px solid var(--line);
@@ -187,6 +173,21 @@
   .pl-bar { height: 10px; background: var(--line); border-radius: 6px; overflow: hidden; margin-top: 14px; cursor: pointer; }
   .pl-bar > div { height: 100%; width: 0; background: var(--accent); }
   .pl-now { margin-top: 10px; font-size: 22px; min-height: 30px; }
+  details.menu { position: relative; display: inline-block; }
+  details.menu > summary { list-style: none; cursor: pointer; }
+  details.menu > summary::-webkit-details-marker { display: none; }
+  details.menu .menu-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 300px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+  details.menu .menu-list button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0;
+    background: transparent; color: inherit; font: inherit; border-radius: 7px; cursor: pointer; }
+  details.menu .menu-list button:hover { background: var(--accent-soft); }
+  .keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 700px) { .keys-grid { grid-template-columns: 1fr; } }
+  .keys-grid h3 { margin: 0 0 6px; font-size: 15px; }
+  .keys-t { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .keys-t td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .keys-t td:first-child { white-space: nowrap; }
   #plScoreView { max-height: 65vh; overflow: auto; background: #fff; border-radius: 10px; border: 1px solid var(--line);
                  margin-top: 10px; }
   svg .note { color: inherit; background: none; }   /* Verovio's notes are not the «.note» boxes */
@@ -225,24 +226,7 @@
   .le-note { width: 104px; cursor: pointer; }
   .le-note select.fig { width: 100%; margin-top: 3px; font-size: 12px; border-radius: 6px; border: 1px solid var(--line);
                         background: var(--card); color: var(--ink); }
-  .keys { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
-  .keys kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font-family: inherit; }
-  .nt-card.flash { box-shadow: 0 0 0 4px var(--accent); transition: box-shadow .3s; }
-  .nt-voice .vhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .nt-opt.edited { border-style: dashed; }
-  .ed-preview { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 6px; min-height: 90px; }
-  .ed-preview svg { width: 100%; height: auto; max-height: 150px; }
-  .ed-notes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-  .ed-note { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; text-align: center; min-width: 92px; }
-  .ed-note.changed { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-  .ed-note .nm { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
-  .ed-note .dur { font-size: 11px; color: var(--muted, #6b6f76); }
-  .ed-note button { min-width: 28px; padding: 2px 6px; margin: 1px; border-radius: 6px; border: 1px solid var(--line);
-                    background: transparent; color: inherit; cursor: pointer; font-size: 14px; }
-  .ed-note button:hover { border-color: var(--accent); }
-  .ed-note button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .goto { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-  .goto input { width: 80px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; }
+  kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font-family: inherit; }
   .update { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
     background: var(--accent-soft); color: var(--ink); border: 1px solid var(--accent); border-radius: 12px;
     padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
@@ -342,7 +326,8 @@
     </section>
     <div class="savebar">
       <span id="rvStatus" class="hint"></span>
-      <button class="btn primary" id="rvSave" disabled>Guardar y rehacer</button>
+      <button class="btn primary" id="rvSave" disabled title="Guarda tus cambios al momento (siguen ahí aunque cierres)">Guardar</button>
+      <button class="btn" id="rvRebuild" title="Rehace la partitura para practicar, la copia digital y el audio con tus cambios">Rehacer partitura</button>
     </div>
   </div>
 
@@ -357,7 +342,9 @@
       <p class="hint" style="margin:10px 0 0">Corrige las palabras como están en el himnario. Cada estrofa es un párrafo
         (deja una línea en blanco entre estrofas); el número «1.» es opcional. Escribe las palabras completas: Coralis
         las separa en sílabas y las pone en las notas, con las sinalefas («te‿a») donde hagan falta. Si una palabra se
-        separa mal, márcala con guiones: «Sal-va-dor». El coro, si se imprime una sola vez, va solo en la estrofa 1.</p>
+        separa mal, márcala con guiones: «Sal-va-dor». El coro, si se imprime una sola vez, va solo en la estrofa 1.
+        La letra que leyó el programa aparece con guiones entre sílabas, como en el himnario: así ves qué va en cada nota.
+        Si dos palabras salen unidas («fuer-te-nues-tro»), pon el espacio («fuer-te nues-tro»). Lo que no toques se queda en sus notas.</p>
       <p class="hint" id="lyFrom" style="margin:6px 0 0"></p>
       <textarea id="lyText" spellcheck="true" style="width:100%;min-height:52vh;margin-top:10px;padding:12px;font-size:16px;
         line-height:1.5;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit"></textarea>
@@ -365,7 +352,8 @@
     <div class="savebar">
       <button class="btn" id="lyReset">Volver a la letra leída</button>
       <span id="lyStatus" class="hint"></span>
-      <button class="btn primary" id="lySave">Guardar y rehacer</button>
+      <button class="btn primary" id="lySave" title="Guarda la letra al momento (sigue ahí aunque cierres)">Guardar</button>
+      <button class="btn" id="lyRebuild" title="Rehace la partitura con esta letra">Rehacer partitura</button>
     </div>
   </div>
 
@@ -377,6 +365,7 @@
         <span><button class="btn" id="leSigns" title="Repeticiones, casillas, segno, coda, silencios de varios compases">𝄋 Signos</button>
           <button class="btn" id="leText">Letra como texto</button>
           <button class="btn" id="leNames" title="Cómo se llaman las voces en este himno (p. ej. Primer tenor)">Nombres de las voces</button>
+          <button class="btn" type="button" onclick="$('keysDlg').showModal()" title="Las teclas para escribir la letra y corregir notas">⌨ Atajos</button>
           <button class="btn" id="leBack">← Volver</button></span>
       </div>
       <div class="le-top" style="margin-top:10px">
@@ -384,7 +373,7 @@
       </div>
       <div class="le-top" style="margin-top:8px">
         <button class="btn" id="lePrev">◀ Anterior</button>
-        <b id="lePos">Compás 1</b>
+        <b id="lePos">Compás 1</b><span id="leSignsNow" style="margin-left:6px"></span>
         <button class="btn" id="leNext">Siguiente ▶</button>
         <label>Ir al compás <input id="leGo" style="width:64px;padding:5px 6px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit"></label>
         <span id="leDoubt" class="pill warn hidden">compás dudoso</span>
@@ -399,19 +388,6 @@
       <div class="le-grid">
         <div><img id="leImg" class="le-img" alt="Compás del original"><div id="leBody"></div></div>
         <aside class="le-tools" id="leTools"><p class="hint">Haz clic en una nota.</p></aside>
-      </div>
-      <div class="keys">
-        <b>Letra</b> (como en MuseScore): escribe la sílaba y pulsa <kbd>-</kbd> si la palabra sigue («Sal-va-dor»),
-        <kbd>espacio</kbd> si termina, o <kbd>_</kbd> si la sílaba se alarga sobre las notas siguientes (melisma, sin guion).
-        Sinalefa «‿»: <kbd>⌥ Opción</kbd>+<kbd>-</kbd> (o <kbd>⌥</kbd>+<kbd>⌘</kbd>+<kbd>-</kbd>). Una tecla sin escribir
-        nada deja la nota sin sílaba. <kbd>⌫</kbd> en vacío vuelve. <kbd>Intro</kbd> = compás siguiente.<br>
-        <b>Notas:</b> <kbd>↑</kbd> <kbd>↓</kbd> suben o bajan la nota (con la armadura); los botones ♭ ♮ ♯ ponen una
-        alteración y ⌒ la liga a la siguiente. La lista cambia la figura (en las voces sin letra también
-        <kbd>7</kbd> redonda, <kbd>6</kbd> blanca, <kbd>5</kbd> negra, <kbd>4</kbd> corchea, <kbd>3</kbd> semicorchea,
-        <kbd>.</kbd> puntillo). ◀ ▶ (o <kbd>⌥</kbd>+<kbd>←</kbd> <kbd>→</kbd>) la mueven antes o después
-        («Mover de a»): la nota o el silencio de al lado se acorta y queda un silencio donde estaba. <kbd>←</kbd> <kbd>→</kbd>
-        cambian de nota. 🗑 (<kbd>⌘</kbd>+<kbd>⌫</kbd>) convierte la nota en silencio; en un silencio, «Poner nota aquí» (<kbd>N</kbd>).
-        ✂ divide una nota en dos. <kbd>⌘</kbd>+<kbd>Z</kbd> deshace, <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd> rehace.
       </div>
     </section>
     <div class="savebar">
@@ -450,11 +426,7 @@
           <input type="number" id="plLoopA" min="1" value="1"> al <input type="number" id="plLoopB" min="1" value="4"></label>
       </div>
       <div class="pl-controls">
-        <button class="btn" id="plSave" disabled title="Guarda un mp3 tal como suena ahora: voces, volúmenes, lados, tono, velocidad y metrónomo">⬇ Descargar audio</button>
-        <button class="btn" id="plVideo" disabled title="Graba un video con la letra (tipo karaoke) y el sonido como suena ahora">🎬 Crear video</button>
-        <button class="btn" id="plMidi" disabled title="Guarda un MIDI (una pista por voz) con este tono y esta velocidad. Con «Sola», solo esa voz">⬇ MIDI</button>
-        <button class="btn" id="plScore" disabled title="Guarda la partitura (MusicXML) en este tono. Con «Sola», solo esa voz">⬇ Partitura en este tono</button>
-        <button class="btn" id="plPdf" disabled title="Guarda la partitura en PDF (hojas A4, para imprimir) en este tono. Con «Sola», solo esa voz">⬇ PDF</button>
+        <button class="btn primary" id="plSave" disabled title="Audio, video, PDF, partitura o MIDI: de las 4 voces o de una, con el tono y la velocidad de ahora">⬇ Guardar…</button>
         <label title="Muestra la partitura completa y marca el compás y las notas que suenan"><input type="checkbox" id="plShowScore" checked> Ver la partitura</label>
       </div>
       <div class="pl-bar" id="plBar" title="Haz clic para ir a ese punto"><div></div></div>
@@ -479,8 +451,8 @@
     <section class="card pl-voicecard">
       <h2 style="margin:0 0 4px">Voces</h2>
       <p class="hint" style="margin:0">«Destacar» deja tu voz fuerte y las demás suaves; «Sola» se oye solo esa voz.
-        La letra de arriba es la de la voz destacada. «⬇ Descargar audio» (arriba) guarda un mp3 tal como suena:
-        las 4 voces, tu voz destacada o una voz sola. Con audífonos, «Lado» pone cada voz a la izquierda o a la derecha.</p>
+        La letra de arriba es la de la voz destacada. Con audífonos, «Lado» pone cada voz a la izquierda o a la derecha.
+        Para guardar audio, video, PDF, partitura o MIDI de una voz o de todas: «⬇ Guardar…» (arriba).</p>
       <div class="row" style="margin-top:8px;gap:8px">
         <button class="btn" type="button" id="plSplit" title="La voz destacada a la izquierda y las demás a la derecha (con audífonos)">🎧 Mi voz a la izquierda, las demás a la derecha</button>
         <button class="btn" type="button" id="plCenter">Todas al centro</button>
@@ -491,25 +463,42 @@
     </section>
   </div>
 
-  <div id="notes" class="hidden">
-    <section class="card">
-      <div class="row" style="justify-content:space-between">
-        <h2 style="margin:0">Revisar notas · <span id="ntTitle"></span></h2>
-        <button class="btn" id="ntBack">← Volver</button>
+  <dialog id="keysDlg" style="max-width:720px">
+    <form method="dialog">
+      <h2 style="margin-top:0">Atajos del editor</h2>
+      <p class="hint" id="keysWin" style="margin-top:0">En Windows: <kbd>Ctrl</kbd> en lugar de <kbd>⌘</kbd> y <kbd>Alt</kbd> en lugar de <kbd>⌥</kbd>.</p>
+      <div class="keys-grid">
+        <div>
+          <h3>Letra (como en MuseScore)</h3>
+          <table class="keys-t">
+            <tr><td><kbd>-</kbd></td><td>La palabra sigue en la nota siguiente (pone el guion: «Sal-va-dor»)</td></tr>
+            <tr><td><kbd>espacio</kbd></td><td>Palabra nueva en la nota siguiente</td></tr>
+            <tr><td><kbd>_</kbd></td><td>La sílaba se alarga sobre la nota siguiente (melisma, sin guion)</td></tr>
+            <tr><td><kbd>⌥</kbd> <kbd>-</kbd></td><td>Sinalefa: dos sílabas en una nota («me‿el»)</td></tr>
+            <tr><td><kbd>⌫</kbd> en vacío</td><td>Volver a la nota anterior</td></tr>
+            <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Nota anterior / siguiente (al principio o al final de la sílaba)</td></tr>
+            <tr><td><kbd>Intro</kbd></td><td>Compás siguiente</td></tr>
+          </table>
+          <p class="hint">Las notas ligadas se saltan solas. Pasar con una tecla sin escribir deja la nota sin sílaba.</p>
+        </div>
+        <div>
+          <h3>Notas</h3>
+          <table class="keys-t">
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Subir / bajar un grado (con la armadura)</td></tr>
+            <tr><td><kbd>⌥</kbd> <kbd>7</kbd> <kbd>6</kbd> <kbd>5</kbd> <kbd>4</kbd> <kbd>3</kbd></td><td>Redonda, blanca, negra, corchea, semicorchea</td></tr>
+            <tr><td><kbd>⌥</kbd> <kbd>.</kbd></td><td>Poner o quitar el puntillo</td></tr>
+            <tr><td><kbd>⌥</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Mover la nota antes / después</td></tr>
+            <tr><td><kbd>⌘</kbd> <kbd>⌫</kbd></td><td>Borrar la nota (queda un silencio)</td></tr>
+            <tr><td><kbd>N</kbd> en un silencio</td><td>Poner una nota ahí</td></tr>
+            <tr><td><kbd>⌘</kbd> <kbd>Z</kbd> / <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>Z</kbd></td><td>Deshacer / rehacer</td></tr>
+          </table>
+          <p class="hint">Los botones de la derecha hacen lo mismo y más: ♭ ♮ ♯, ⌒ ligar, figura, ✂ dividir, ③ tresillo,
+            y el panel «Compás» (agregar, borrar, cifra, armadura, copiar).</p>
+        </div>
       </div>
-      <p class="hint" style="margin:10px 0 0">En los compases dudosos las lecturas no se pusieron de acuerdo. Compara cada
-        versión con la imagen y haz clic en la correcta. Si ninguna está bien, pulsa <b>✎ Corregir</b> y cambia las
-        notas tú. Al terminar, pulsa <b>Guardar y rehacer</b>.</p>
-      <div class="goto"><span>¿Hay un error en otro compás?</span>
-        <label>Compás n.º <input id="ntGoNum" inputmode="numeric" placeholder="12"></label>
-        <button class="btn" id="ntGo">Abrir</button><span id="ntGoMsg" class="hint"></span></div>
-    </section>
-    <div id="ntList"></div>
-    <div class="savebar">
-      <span id="ntStatus" class="hint"></span>
-      <button class="btn primary" id="ntSave" disabled>Guardar y rehacer</button>
-    </div>
-  </div>
+      <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn primary" value="ok">Entendido</button></div>
+    </form>
+  </dialog>
 
   <dialog id="namesDlg">
     <form method="dialog">
@@ -529,18 +518,31 @@
     </form>
   </dialog>
 
+  <dialog id="saveDlg" style="max-width:560px">
+    <form method="dialog">
+      <h2 style="margin-top:0">Guardar</h2>
+      <p class="hint" id="svNow" style="margin-top:0"></p>
+      <label>Qué
+        <select id="svWhat">
+          <option value="audio">Audio (mp3)</option>
+          <option value="video">Video con la letra (tipo karaoke)</option>
+          <option value="pdf">PDF para imprimir</option>
+          <option value="xml">Partitura (MusicXML, para MuseScore o la app de solfeo)</option>
+          <option value="midi">MIDI</option>
+        </select></label>
+      <label>De quién <select id="svWho"></select></label>
+      <p class="hint" id="svHint"></p>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok" id="svGo">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="vidDlg">
     <form method="dialog">
       <h2 style="margin-top:0">Crear video</h2>
       <p class="hint">Se graba con la mezcla, la velocidad y el metrónomo que tienes en «Escuchar». Tarda lo que dura el himno.</p>
       <p id="vdOnly" style="font-weight:600;margin:4px 0"></p>
-      <div id="vdWhatRow">
-        <label>Qué grabar
-          <select id="vdWhat"><option value="mix">Un video, tal como suena ahora</option>
-            <option value="each">Un video por cada voz (para mandarle a cada cantante el suyo)</option></select></label>
-      </div>
-      <label>En el video de una voz, esa voz va
-        <select id="vdMode"><option value="hl">destacada (las demás suaves)</option><option value="solo">sola</option></select></label>
       <label>Nombre del coro o de la iglesia <span class="hint">(opcional: va en el título y al pie)</span></label>
       <input type="text" id="vdChoir" placeholder="Por ejemplo: Coro Voces Reunidas">
       <label>Colores
@@ -553,33 +555,6 @@
       </div>
       <div class="row" style="justify-content:flex-end;margin-top:14px">
         <button class="btn" value="cancel">Cancelar</button><button class="btn primary" value="ok">Grabar video</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="voiceDlg">
-    <form method="dialog">
-      <h2 style="margin-top:0">Descargar una voz</h2>
-      <p class="hint">Se guarda un MusicXML solo con esa voz y su letra, con todas las estrofas como el archivo
-        para practicar.</p>
-      <div class="row" id="voiceBtns" style="gap:8px;flex-wrap:wrap"></div>
-      <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" value="cancel">Cerrar</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="ntEditor" style="max-width:880px;width:92vw">
-    <form method="dialog">
-      <h2 id="edTitle" style="margin-top:0"></h2>
-      <img id="edImg" alt="" style="max-width:100%;max-height:200px;display:block;margin:0 auto 8px;border:1px solid var(--line);border-radius:8px;background:#fff">
-      <div class="ed-preview" id="edPreview"></div>
-      <p class="hint" style="margin:8px 0 0">▲ ▼ suben o bajan la nota un grado (con la armadura). ♭ ♮ ♯ le ponen esa
-        alteración. «⌒ ligada» la une a la nota siguiente (la misma nota, en este compás o al empezar el siguiente).
-        El ritmo queda como está.</p>
-      <div class="ed-notes" id="edNotes"></div>
-      <div class="row" style="justify-content:space-between">
-        <button class="btn" type="button" id="edReset">Volver a las notas leídas</button>
-        <span><button class="btn" value="cancel">Cancelar</button>
-        <button class="btn primary" value="ok">Aceptar</button></span>
       </div>
     </form>
   </dialog>
@@ -689,16 +664,15 @@ function doubtPill(r) {
 }
 function openBtns(r) {
   const d = esc(JSON.stringify(r.run_dir));
-  return `<button class="btn" title="4 voces, una estrofa tras otra: para la app de solfeo"
-            onclick='pywebview.api.open_result(${d},"score")'>Para practicar</button>
-          <button class="btn primary" title="Oír las voces con piano, con metrónomo" onclick='openPlayer(${d})'>▶ Escuchar</button>
-          <button class="btn" title="Guardar un MusicXML con una sola voz" onclick='chooseVoice(${d})'>⬇ Una voz</button>
-          <button class="btn" title="Corregir letra, notas, alteraciones y ligaduras compás por compás, viendo el original" onclick='openLyricNotes(${d})'>✎ Editar</button>
-          ${r.has_digital ? `<button class="btn" title="2 pentagramas como el original, con repeticiones y signos"
-            onclick='pywebview.api.open_result(${d},"digital")'>Copia digital</button>` : ""}
-
-          <button class="btn" onclick='pywebview.api.open_result(${d},"report")'>Reporte</button>
-          <button class="btn" onclick='pywebview.api.open_result(${d},"folder")'>Carpeta</button>`;
+  const item = (what, label, hint) => `<button type="button" title="${hint}" onclick='this.closest("details").open = false; pywebview.api.open_result(${d}, "${what}")'>${label}</button>`;
+  return `<button class="btn primary" title="Oír las voces con piano y metrónomo, ver la partitura, y guardar audio, video, PDF, MIDI…" onclick='openPlayer(${d})'>▶ Escuchar</button>
+          <button class="btn" title="Corregir notas, ritmo, letra, compases y signos viendo el original" onclick='openLyricNotes(${d})'>✎ Editar</button>
+          <details class="menu"><summary class="btn">Abrir ▾</summary><div class="menu-list">
+            ${item("score", "Para practicar <span class='hint'>(4 voces, en MuseScore)</span>", "4 voces, una estrofa tras otra: para la app de solfeo")}
+            ${r.has_digital ? item("digital", "Copia digital <span class='hint'>(2 pentagramas, como el original)</span>", "2 pentagramas como el original, con repeticiones y signos") : ""}
+            ${item("report", "Reporte <span class='hint'>(cada compás con su imagen)</span>", "Cada compás con su imagen, lo que entendió el programa y por qué es dudoso")}
+            ${item("folder", "Carpeta del himno", "Donde se guarda todo lo de este himno")}
+          </div></details>`;
 }
 
 function onDone(r) {
@@ -709,18 +683,18 @@ function onDone(r) {
     <h3>${esc(r.title)}</h3>
     <div class="stats">${esc(statsLine(r))} &nbsp; ${doubtPill(r)}</div>
     ${n ? `<div class="note">Revisa en el reporte los compases ${esc(r.doubtful.join(", "))}: el programa no está seguro de ellos.</div>` : ""}
-    <p class="hint" style="margin:0 0 12px">«Para practicar»: las 4 voces, estrofa tras estrofa. «Copia digital»: 2 pentagramas como el original, con repeticiones y signos. Se abren${musescore ? " en MuseScore" : ""}.</p>
+    <p class="hint" style="margin:0 0 12px">«▶ Escuchar»: con piano, la partitura a la vista, y para guardar audio, video, PDF o MIDI. «✎ Editar»: corregir viendo el original. En «Abrir ▾»: el archivo para practicar (4 voces, estrofa tras estrofa) y la copia digital (2 pentagramas como el original)${musescore ? ", en MuseScore" : ""}.</p>
     <div class="row">${openBtns(r)}</div>`;
   show("result", true);
   loadHistory();
 }
 function onError(e) {
-  if (rv) { $("rvStatus").textContent = "No se pudo rehacer: " + e.message; $("rvSave").disabled = false; return; }
-  if (nt) { $("ntStatus").textContent = "No se pudo rehacer: " + e.message; $("ntSave").disabled = false; return; }
+  if (rv) { $("rvStatus").textContent = "No se pudo rehacer: " + e.message; $("rvSave").disabled = false;
+            $("rvRebuild").disabled = false; return; }
   if (le) { $("leStatus").textContent = "No se pudo rehacer: " + e.message; $("leSave").disabled = false;
             $("leRebuild").disabled = false; return; }
   if (ly) { $("lyStatus").textContent = "No se pudo rehacer: " + e.message; $("lySave").disabled = false;
-            $("lyReset").disabled = false; return; }
+            $("lyReset").disabled = false; $("lyRebuild").disabled = false; return; }
   stopTimer(); setBusy(false); show("progress", false);
   $("result").innerHTML = `<h2>No se pudo convertir</h2><div class="error">${esc(e.message)}</div>`;
   show("result", true);
@@ -844,73 +818,31 @@ function closeReview() {
   if (Object.keys(rvChanges).length && !confirm("Hay cambios sin guardar. ¿Salir de todos modos?")) return;
   show("review", false); show("home", true); rv = null; loadHistory();
 }
-async function saveReview() {
-  const res = await pywebview.api.save_review(rv.run_dir, rvChanges);
+async function saveReview(rebuild = false) {
+  const res = await pywebview.api.save_review(rv.run_dir, rvChanges, rebuild);
   if (!res.ok) { $("rvStatus").textContent = res.error; return; }
-  $("rvSave").disabled = true;
-  $("rvStatus").textContent = "Rehaciendo la partitura con tus cambios…";
+  for (const [idx, f] of Object.entries(rvChanges)) {   // what is saved is what the grid shows now
+    const m = rv.measures.find((x) => String(x.index) === idx); if (m) m.marks = Object.assign({}, m.marks, f);
+  }
+  rvChanges = {}; renderReview();
+  $("rvStatus").textContent = rebuild ? "Rehaciendo la partitura con tus cambios…" :
+    "✓ Guardado. Cuando termines, pulsa «Rehacer partitura» (o se rehace sola al abrirla o escucharla).";
+  if (rebuild) $("rvRebuild").disabled = true;
+}
+async function rebuildReview() {
+  if (Object.keys(rvChanges).length) return saveReview(true);
+  const res = await pywebview.api.rebuild(rv.run_dir, "onReviewDone");
+  if (!res.ok) { $("rvStatus").textContent = res.error; return; }
+  $("rvRebuild").disabled = true; $("rvStatus").textContent = "Rehaciendo la partitura con tus cambios…";
 }
 async function onReviewDone(r) {
   if (!rv) { loadHistory(); return; }
   await openReview(r.run_dir);
-  $("rvStatus").textContent = "✓ Guardado. Los archivos ya incluyen tus cambios.";
+  $("rvRebuild").disabled = false;
+  $("rvStatus").textContent = "✓ Partitura rehecha con tus cambios.";
 }
 
 
-// ---------------------------------------------------------------- review of notes
-let nt = null;            // {run_dir, measures}
-let ntChoice = {};        // index -> {voice: key}
-let ntEdits = {};         // index -> {voice: {changes: {offset: pitch}, events, svg, desc}}
-
-function renderNotes() {
-  if (!nt.measures.length && !(nt.extra || []).length) {
-    $("ntList").innerHTML = `<section class="card"><p class="hint">No hay compases dudosos. Si ves un error en algún
-      compás, escribe su número arriba y pulsa «Abrir».</p></section>`;
-    $("ntSave").disabled = !(Object.keys(ntChoice).length || Object.keys(ntEdits).length);
-    return;
-  }
-  const all = nt.measures.concat((nt.extra || []).filter((x) => !nt.measures.some((y) => y.index === x.index)));
-  $("ntList").innerHTML = all.map((m) => `
-    <section class="card nt-card" id="nt-m-${m.index}">
-      <h2>Compás ${esc(m.label)}${m.single ? ` <span class="hint">(abierto por ti)</span>` : ""}</h2>
-      ${m.thumb ? `<img class="orig" src="${m.thumb}" alt="Original">` : `<p class="hint">(sin imagen del original)</p>`}
-      ${Object.entries(m.voices).map(([v, info]) => `
-        <div class="nt-voice"><div class="vhead"><h3>${esc(info.name)}</h3>
-          <button class="btn" onclick="openEditor(${m.index}, '${v}')">✎ Corregir</button></div><div class="nt-opts">
-          ${(() => { const mine = ((ntEdits[m.index] || {})[v]); return mine && mine.svg !== undefined ? `
-            <div class="nt-opt sel edited">${mine.svg || `<p class="hint">(no se pudo dibujar)</p>`}
-              <div class="desc">${esc(mine.desc)}</div>
-              <div class="cap"><span>Tu corrección (sin guardar)</span><span>✓</span></div></div>` : ""; })()}
-          ${info.options.map((o, k) => {
-            const mine = (ntEdits[m.index] || {})[v];
-            const picked = (ntChoice[m.index] || {})[v];
-            const sel = !(mine && mine.svg !== undefined) && (picked ? picked === o.key : o.chosen);
-            return `<div class="nt-opt ${sel ? "sel" : ""} ${o.edited ? "edited" : ""}" onclick="pickVersion(${m.index}, '${v}', ${k})">
-              ${o.svg || `<p class="hint">(no se pudo dibujar)</p>`}
-              <div class="desc">${esc(o.desc || "")}</div>
-              <div class="cap"><span>${o.edited ? "Corregida por ti" : o.total ? `${o.votes} de ${o.total} lecturas` : "Como está ahora"}</span>
-                <span>${sel ? "✓ elegida" : ""}</span></div></div>`;
-          }).join("")}
-        </div></div>`).join("")}
-    </section>`).join("");
-  $("ntSave").disabled = !(Object.keys(ntChoice).length || Object.keys(ntEdits).length);
-}
-function findMeasure(index) {
-  return nt.measures.find((x) => x.index === index) || (nt.extra || []).find((x) => x.index === index);
-}
-function pickVersion(index, v, k) {
-  const m = findMeasure(index);
-  const o = m.voices[v].options[k];
-  if (ntEdits[index] && ntEdits[index][v]) {  // picking a version drops the unsaved correction
-    delete ntEdits[index][v]; if (!Object.keys(ntEdits[index]).length) delete ntEdits[index];
-  }
-  if (o.edited || m.single) { renderNotes(); return; }
-  if (m.voices[v].options.some((x) => x.edited))  // a saved correction: picking a reading drops it
-    (ntEdits[index] = ntEdits[index] || {})[v] = {changes: {}};
-  ntChoice[index] = Object.assign({}, ntChoice[index] || {}, {[v]: o.key});
-  if (o.chosen) { delete ntChoice[index][v]; if (!Object.keys(ntChoice[index]).length) delete ntChoice[index]; }
-  renderNotes();
-}
 // ---------------------------------------------------------------- editing the words
 let ly = null;
 async function openLyrics(runDir) {
@@ -928,18 +860,36 @@ function closeLyrics() {
   if (ly && $("lyText").value !== ly.original && !confirm("Hay cambios sin guardar. ¿Salir de todos modos?")) return;
   ly = null; show("lyrics", false); show("home", true); loadHistory();
 }
-async function saveLyrics(reset) {
+async function saveLyrics(reset, rebuild = false) {
   if (reset && !confirm("¿Volver a la letra que leyó el programa? Se borra la letra que guardaste.")) return;
-  const res = await pywebview.api.save_lyrics(ly.run_dir, reset ? null : $("lyText").value);
+  const text = $("lyText").value;
+  const res = await pywebview.api.save_lyrics(ly.run_dir, reset ? null : text, rebuild);
   if (!res.ok) { $("lyStatus").textContent = res.error; return; }
-  $("lySave").disabled = true; $("lyReset").disabled = true;
-  $("lyStatus").textContent = "Poniendo la letra en las notas y rehaciendo la partitura…";
+  if (rebuild) {
+    $("lySave").disabled = true; $("lyReset").disabled = true; $("lyRebuild").disabled = true;
+    $("lyStatus").textContent = "Poniendo la letra en las notas y rehaciendo la partitura…";
+    return;
+  }
+  if (reset) {   // to show what the program read, the score is rebuilt without the saved words
+    $("lyStatus").textContent = "Volviendo a la letra leída…";
+    await openLyrics(ly.run_dir);
+    $("lyStatus").textContent = "✓ Esta es otra vez la letra que leyó el programa.";
+    return;
+  }
+  ly.original = text;
+  $("lyStatus").textContent = "✓ Guardado. Cuando termines, pulsa «Rehacer partitura» (o se rehace sola al abrirla o escucharla).";
+}
+async function rebuildLyrics() {
+  if ($("lyText").value !== ly.original) return saveLyrics(false, true);
+  const res = await pywebview.api.rebuild(ly.run_dir, "onLyricsDone");
+  if (!res.ok) { $("lyStatus").textContent = res.error; return; }
+  $("lyRebuild").disabled = true; $("lyStatus").textContent = "Poniendo la letra en las notas y rehaciendo la partitura…";
 }
 async function onLyricsDone(r) {
-  $("lySave").disabled = false; $("lyReset").disabled = false;
+  $("lySave").disabled = false; $("lyReset").disabled = false; $("lyRebuild").disabled = false;
   if (!ly) { loadHistory(); return; }
   await openLyrics(r.run_dir);
-  $("lyStatus").textContent = "✓ Guardado. Revisa la partitura o escúchala para ver cómo quedó.";
+  $("lyStatus").textContent = "✓ Partitura rehecha con esta letra. Revísala o escúchala para ver cómo quedó.";
 }
 
 // ---------------------------------------------------------------- the editor (words + notes)
@@ -951,7 +901,7 @@ async function openLyricNotes(runDir, k = 0, line = 1, voice = null) {
   $("leSave").disabled = true;
   const d = await pywebview.api.lyric_editor_data(runDir);
   le = {run_dir: runDir, data: d, line, voice, k: Math.min(k, d.measures.length - 1), cur: 0,
-        lyr: {}, vlyr: {}, work: {}, choice: {}, rhythm: {}, thumbs: {}, dirty: false, step: "1/2",
+        lyr: {}, vlyr: {}, work: {}, choice: {}, rhythm: {}, marks: {}, thumbs: {}, dirty: false, step: "1/2",
         undo: [], redo: [], rest: null};
   document.body.classList.add("wide");
   $("leRebuild").disabled = false;
@@ -1040,6 +990,7 @@ async function showMeasure(k, cur) {
   le.k = Math.max(0, Math.min(ms.length - 1, k));
   const m = ms[le.k], v = curVoice(m);
   $("lePos").textContent = `Compás ${m.label} de ${ms[ms.length - 1].label}`;
+  signLine(m);
   const doubts = le.data.doubtful || [];
   show("leDoubt", doubts.includes(m.index) || Object.keys(m.versions || {}).length > 0);
   $("leDoubtCount").textContent = doubts.length ? `${doubts.length} compases dudosos` : "sin compases dudosos";
@@ -1127,6 +1078,7 @@ function measureTools() {
     <p class="hint" style="margin:2px 0 8px">Sin «solo este compás», el cambio va desde aquí hasta donde el programa leyó otra cifra o armadura.
       Con otra armadura, las notas sin alteración propia se ajustan a ella.</p>
     <div class="row2"><button onclick="leCopy()" title="Copia las notas de las 4 voces de este compás">⧉ Copiar este compás</button>${clip}</div>
+    ${signTools(m)}
   </details>`;
 }
 async function leMeasureOp(op, after) {
@@ -1165,6 +1117,43 @@ async function leSignatureReset() {
   const r = await pywebview.api.set_signature(le.run_dir, m.index, null, null, "run");
   if (!r || !r.ok) { $("leStatus").textContent = (r && r.error) || "No se pudo."; return; }
   $("leRebuild").disabled = true;
+}
+// --- the signs of a measure (the same as in «𝄋 Signos»), saved with the rest of the editor
+function marksOf(m) { return Object.assign({}, m.marks || {}, le.marks[m.index] || {}); }
+function signTools(m) {
+  const mk = marksOf(m);
+  const box = (f, label, hint) => `<label class="hint" style="display:flex;gap:6px;align-items:center;margin:3px 0;color:var(--ink)" title="${hint}">
+      <input type="checkbox" ${mk[f] ? "checked" : ""} onchange="leMark('${f}', this.checked)"> ${label}</label>`;
+  const num = (f, min, max) => `<input type="number" min="${min}" max="${max}" placeholder="—" value="${mk[f] == null ? "" : mk[f]}"
+      style="width:56px" onchange="leMark('${f}', this.value ? parseInt(this.value, 10) : null)">`;
+  return `<h3 style="margin:12px 0 4px">Signos de este compás</h3>
+    ${box("repeat_start", "𝄆 Empieza la repetición", "Barra de repetición al principio del compás")}
+    ${box("repeat_end", "𝄇 Termina la repetición", "Barra de repetición al final del compás")}
+    ${box("segno", "𝄋 Segno", "Al principio de este compás")}
+    ${box("coda", "⊕ Coda", "Aquí empieza la coda")}
+    ${box("to_coda", "→ a la Coda", "Al terminar este compás se salta a la coda")}
+    ${box("fine", "Fine", "Aquí termina la pieza")}
+    <label class="hint">Salto al final del compás</label>
+    <select onchange="leMark('jump', this.value || null)"><option value="">ninguno</option>
+      ${(le.data.jumps || []).map((j) => `<option ${mk.jump === j ? "selected" : ""}>${esc(j)}</option>`).join("")}</select>
+    <label class="hint" style="display:block;margin-top:6px">Casilla ${num("volta", 1, 50)}.ª vez, hasta la ${num("volta_to", 2, 50)}.ª
+      <span title="Solo si dice p. ej. «1.-6.»">(«1.-6.»)</span></label>
+    <label class="hint" style="display:block;margin-top:6px">Silencio de varios compases ${num("multirest", 2, 200)}</label>
+    <p class="hint" style="margin:4px 0 0">Para ver los signos de todo el himno: «𝄋 Signos» (arriba).</p>`;
+}
+function leMark(field, value) {
+  const m = le.data.measures[le.k];
+  pushUndo();
+  const mk = marksOf(m);
+  mk[field] = value;
+  const keep = ["segno", "coda", "to_coda", "fine", "repeat_start", "repeat_end", "jump", "volta", "volta_to", "multirest"];
+  le.marks[m.index] = Object.fromEntries(keep.map((f) => [f, mk[f] == null ? null : mk[f]]));
+  changed(); le.mtOpen = true; renderTools(); signLine(m);
+}
+function signLine(m) {   // the signs, next to «Compás n de N»
+  const el = $("leSignsNow"); if (!el) return;
+  const mk = marksOf(m);
+  el.innerHTML = hasSigns(mk) ? signChips(mk) : "";
 }
 function voiceLength(evs) { return evs.reduce((a, e) => fadd(a, fr(e.duration)), {n: 0, d: 1}); }
 function leCopy() {
@@ -1429,7 +1418,7 @@ function sameInfo(m, v) {
 }
 // --- undo / redo: a snapshot of every change made here
 function snapshot() {
-  return JSON.stringify({work: le.work, rhythm: le.rhythm, lyr: le.lyr, vlyr: le.vlyr, choice: le.choice});
+  return JSON.stringify({work: le.work, rhythm: le.rhythm, lyr: le.lyr, vlyr: le.vlyr, choice: le.choice, marks: le.marks});
 }
 function pushUndo(group) {
   // typing in the same box is one step; anything else is a step of its own
@@ -1439,7 +1428,7 @@ function pushUndo(group) {
 }
 function restore(snap) {
   const x = JSON.parse(snap);
-  Object.assign(le, {work: x.work, rhythm: x.rhythm, lyr: x.lyr, vlyr: x.vlyr, choice: x.choice});
+  Object.assign(le, {work: x.work, rhythm: x.rhythm, lyr: x.lyr, vlyr: x.vlyr, choice: x.choice, marks: x.marks || {}});
   le.lastGroup = null; changed(); showMeasure(le.k, Math.max(0, le.cur));
 }
 function leUndo() { if (!le.undo.length) return; le.redo.push(snapshot()); restore(le.undo.pop()); }
@@ -1577,10 +1566,14 @@ function leKey(ev, i) {
   if ((ev.metaKey || ev.ctrlKey) && (ev.key === "z" || ev.key === "Z")) { ev.preventDefault(); ev.shiftKey ? leRedo() : leUndo(); return; }
   if ((ev.metaKey || ev.ctrlKey) && ev.key === "Backspace") { ev.preventDefault(); leDelete(i); return; }
   if (ev.key === "ArrowUp" || ev.key === "ArrowDown") { ev.preventDefault(); lePitch(i, ev.key === "ArrowUp" ? 1 : -1); return; }
-  if (!isInput && "34567".includes(ev.key) && ev.key.length === 1) {   // like MuseScore: 7 whole … 3 sixteenth
-    ev.preventDefault(); leFigure(i, {"7": "4", "6": "2", "5": "1", "4": "1/2", "3": "1/4"}[ev.key]); return;
+  // the figure, like MuseScore (7 whole … 3 sixteenth, «.» dot): with ⌥ (Alt on Windows), so that it works
+  // while typing the words too. ev.code: ⌥ + a digit writes another sign on a Mac («#», «∞»…)
+  const digit = /^Digit([3-7])$/.exec(ev.code || "");
+  const figKey = ev.altKey && !ev.metaKey && !ev.ctrlKey && digit ? digit[1] : (!isInput && "34567".includes(ev.key) && ev.key.length === 1 ? ev.key : null);
+  if (figKey) {
+    ev.preventDefault(); leFigure(i, {"7": "4", "6": "2", "5": "1", "4": "1/2", "3": "1/4"}[figKey]); return;
   }
-  if (!isInput && ev.key === ".") {    // dot / undot
+  if ((!isInput && ev.key === ".") || (ev.altKey && !ev.metaKey && !ev.ctrlKey && ev.code === "Period")) {    // dot / undot
     ev.preventDefault();
     const e = eventsOf(m, curVoice(m)).filter((x) => x.pitch && !x.filled)[i], d = fr(e.duration);
     const dotted = FIGURES.find(([x, n]) => n.includes("puntillo") && fcmp(fr(x), d) === 0);
@@ -1675,7 +1668,7 @@ async function saveLyricNotes(rebuild) {
       (edits[idx] = edits[idx] || {})[v] = map;
     }
   }
-  const res = await pywebview.api.save_editor(le.run_dir, le.choice, edits, le.lyr, !!rebuild, rhythm, le.vlyr);
+  const res = await pywebview.api.save_editor(le.run_dir, le.choice, edits, le.lyr, !!rebuild, rhythm, le.vlyr, le.marks);
   if (!res.ok) { $("leStatus").textContent = res.error; return; }
   le.dirty = false; $("leSave").disabled = true;
   if (rebuild) { $("leRebuild").disabled = true; $("leStatus").textContent = "Rehaciendo la partitura con tus cambios…"; }
@@ -1695,7 +1688,6 @@ async function onEditorDone(r) {
   $("leRebuild").disabled = false;
   $("leStatus").textContent = "✓ Partitura rehecha con tus cambios. Puedes seguir, o escucharla en «▶ Escuchar».";
 }
-async function onLyricNotesDone(r) { return onEditorDone(r); }
 function closeLyricNotes() {
   if (le && le.dirty && !confirm("Hay cambios sin guardar. ¿Salir de todos modos?")) return;
   le = null; document.body.classList.remove("wide"); show("lynotes", false); show("home", true); loadHistory();
@@ -1746,8 +1738,7 @@ async function openPlayer(runDir) {
     pl.live = buildGraph(pl.ctx);
     applyGains();
     $("plLoad").textContent = "Listo. Elige la velocidad y pulsa Reproducir.";
-    $("plPlay").disabled = false; $("plSave").disabled = false; $("plVideo").disabled = false;
-    $("plMidi").disabled = false; $("plScore").disabled = false; $("plPdf").disabled = false;
+    $("plPlay").disabled = false; $("plSave").disabled = false;
     loadScoreView();
   } catch (e) {
     $("plLoad").textContent = "No se pudo preparar el sonido: " + (e && e.message ? e.message : e);
@@ -1895,7 +1886,7 @@ async function svgPageJpeg(svg) {   // an A4 page drawn at 300 dpi
 async function savePdf() {
   if (!pl) return;
   const msg = (t) => { $("plLoad").textContent = t; };
-  $("plPdf").disabled = true; msg("Preparando el PDF…");
+  $("plSave").disabled = true; msg("Preparando el PDF…");
   let tok = null;
   try {
     const r = await pywebview.api.score_pages(pl.run_dir, pl.solo, pl.shift);
@@ -1911,7 +1902,7 @@ async function savePdf() {
     msg("No se pudo hacer el PDF: " + (e && e.message ? e.message : e));
   } finally {
     if (tok) pywebview.api.pdf_cancel(tok);
-    $("plPdf").disabled = false;
+    $("plSave").disabled = false;
   }
 }
 function loopRange() {   // [start, end) in quarter notes of the stretch to repeat, or null
@@ -1939,9 +1930,6 @@ function renderVoices() {
       <div class="btns">
         <button class="btn ${pl.hl === v.id ? "primary" : ""}" onclick="highlightVoice('${v.id}')">Destacar</button>
         <button class="btn ${pl.solo === v.id ? "primary" : ""}" onclick="soloVoice('${v.id}')">Sola</button>
-        <button class="btn" title="Guardar un mp3 solo con esta voz" onclick="downloadAudio('${v.id}')">⬇ Audio</button>
-        <button class="btn" title="Grabar el video de esta voz" onclick="openVideoDialog('${v.id}')">🎬 Video</button>
-        <button class="btn" title="Guardar un MusicXML solo con esta voz y su letra" onclick="downloadVoice(pl.run_dir, '${v.id}')">⬇ Partitura</button>
       </div>
     </div>`).join("");
 }
@@ -2402,35 +2390,39 @@ function groupName(d, ids) {
 function videoPrefs() {
   try { return JSON.parse(localStorage.getItem("coralis.video") || "{}"); } catch (e) { return {}; }
 }
-function openVideoDialog(only = null) {
+function openVideoDialog(plan, label) {
   if (!pl || !pl.buffers || vid) return;
   const p = videoPrefs();
-  vidOnly = only;
-  $("vdWhatRow").style.display = only ? "none" : "";
-  $("vdOnly").textContent = only ? `Video de ${pl.data.voices.find((v) => v.id === only).name}` : "";
-  $("vdWhat").value = p.what || "mix"; $("vdMode").value = p.mode || "hl";
+  vidPlan = plan;
+  $("vdOnly").textContent = label || "";
   $("vdChoir").value = p.choir || ""; $("vdTheme").value = p.theme || "verde";
   $("vdStaff").checked = p.staff !== false; $("vdOther").checked = p.other !== false;
   $("vidDlg").showModal();
 }
-let vidOnly = null;
+let vidPlan = null;   // {voices: [ids] | null, mode: "hl" | "solo" | "all" | null}: what «Guardar…» asked for
 async function startVideoFromDialog() {
-  const p = {choir: $("vdChoir").value.trim(), theme: $("vdTheme").value, staff: $("vdStaff").checked, other: $("vdOther").checked,
-             what: $("vdWhat").value, mode: $("vdMode").value};
+  const p = {choir: $("vdChoir").value.trim(), theme: $("vdTheme").value, staff: $("vdStaff").checked, other: $("vdOther").checked};
   try { localStorage.setItem("coralis.video", JSON.stringify(p)); } catch (e) { /* only a convenience */ }
-  const voices = vidOnly ? [vidOnly] : p.what === "each" ? pl.data.voices.filter((v) => v.notes.length).map((v) => v.id) : null;
-  if (!voices) { createVideo(p); return; }
+  const plan = vidPlan || {voices: null, mode: null};
+  if (!plan.voices) {   // one video: as it sounds now, or the 4 voices alike
+    const keep = mixSnapshot();
+    if (plan.mode === "all") mixSet("all");
+    await createVideo(p);
+    mixRestore(keep);
+    return;
+  }
+  const voices = plan.voices;
   // one video per voice: that voice highlighted (or alone), one after another, into one folder
   const folder = null;   // the hymn's folder
-  const keep = {hl: pl.hl, solo: pl.solo};
+  const keep = mixSnapshot();
   vidBatch = {left: voices.length};
   for (const [n, v] of voices.entries()) {
     if (vidBatch && vidBatch.cancelled) break;
-    pl.hl = v; pl.solo = p.mode === "solo" ? v : null; applyGains(); renderVoices();
+    mixSet(plan.mode === "solo" ? "solo" : "hl", v);
     $("plLoad").textContent = voices.length > 1 ? `Video ${n + 1} de ${voices.length}: ${pl.data.voices.find((x) => x.id === v).name}` : "";
     await createVideo(Object.assign({}, p, {folder}));
   }
-  pl.hl = keep.hl; pl.solo = keep.solo; applyGains(); renderVoices();
+  mixRestore(keep);
   const done = vidBatch && !vidBatch.cancelled && voices.length > 1;
   vidBatch = null;
   if (done) $("plLoad").innerHTML = `✓ ${voices.length} videos guardados en la carpeta del himno
@@ -2506,7 +2498,7 @@ async function createVideo(opts = {}) {
   };
   vid.rec.onstop = finishVideo;
   vid.rec.start(1000);
-  show("vidBox", true); $("plVideo").disabled = true; $("plPlay").disabled = true; $("plSave").disabled = true;
+  show("vidBox", true); $("plPlay").disabled = true; $("plSave").disabled = true;
   const total = vid.endAt - vid.startAt;
   const frame = () => {
     if (!vid || vid.stopping) return;
@@ -2547,7 +2539,7 @@ function endVideoUI(msg) {
   if (vid) { for (const s of vid.g.sources) { try { s.stop(); } catch (e) { /* done */ } } }
   vid = null;
   if (resolve) setTimeout(resolve, 300);
-  $("plVideo").disabled = false; $("plPlay").disabled = false; $("plSave").disabled = false;
+  $("plPlay").disabled = false; $("plSave").disabled = false;
   $("vidMsg").textContent = msg;
   setTimeout(() => { if (!vid) show("vidBox", false); }, 8000);
   if (!keepNote) $("plLoad").textContent = msg;
@@ -2558,33 +2550,103 @@ function cancelVideo() {
   vid.cancelled = true; vid.stopping = true;
   try { vid.rec.stop(); } catch (e) { finishVideo(); }
 }
-async function chooseVoice(runDir) {
-  const names = await pywebview.api.voice_names(runDir);
-  $("voiceBtns").innerHTML = names.map((v) =>
-    `<button type="button" class="btn primary" onclick='downloadVoice(${esc(JSON.stringify(runDir))}, "${v.id}")'>${esc(v.name)}</button>`).join("");
-  $("voiceDlg").showModal();
+// ---------------------------------------------------------------- «Guardar…»: what, and whose
+function mixSnapshot() { return {hl: pl.hl, solo: pl.solo, vol: Object.assign({}, pl.vol)}; }
+function mixRestore(k) { pl.hl = k.hl; pl.solo = k.solo; pl.vol = k.vol; applyGains(); renderVoices(); }
+function mixSet(mode, v) {   // "all": the 4 alike · "hl": v loud, the others soft · "solo": only v
+  if (mode === "all") { pl.hl = null; pl.solo = null; pl.data.voices.forEach((x) => { pl.vol[x.id] = 0.8; }); }
+  else if (mode === "hl") { pl.hl = v; pl.solo = null; pl.data.voices.forEach((x) => { pl.vol[x.id] = x.id === v ? 1 : 0.25; }); }
+  else if (mode === "solo") { pl.hl = v; pl.solo = v; }
+  applyGains(); renderVoices();
 }
-async function downloadVoice(runDir, voice) {
-  const inPlayer = pl && pl.run_dir === runDir && !$("player").classList.contains("hidden");
-  const r = await pywebview.api.export_voice(runDir, voice, inPlayer ? pl.shift : 0);
-  if (pl) savedNote(r, "Partitura"); else if (r && r.ok) alert("Guardada en la carpeta del himno: " + r.path.split("/").pop());
-  else if (r && r.error) alert(r.error);
+function nowText() {   // what «as it sounds now» means
+  const n = (id) => pl.data.voices.find((v) => v.id === id).name;
+  return pl.solo ? `${n(pl.solo)} sola` : pl.hl ? `${n(pl.hl)} destacada` : "las 4 voces";
+}
+function openSaveDialog() {
+  if (!pl || !pl.buffers || vid) return;
+  const tone = pl.shift ? shiftLabel(pl.shift).trim().replace(/^\(|\)$/g, "") : "tono original";
+  $("svNow").textContent = `Con lo que tienes puesto ahora: ${tone}, ♩ = ${tempoValue()}${$("plClick").checked ? ", con metrónomo" : ""}.`;
+  fillWho();
+  $("saveDlg").showModal();
+}
+function fillWho() {
+  const what = $("svWhat").value, mix = what === "audio" || what === "video";
+  const singing = pl.data.voices.filter((v) => v.notes.length);
+  let opts = [];
+  if (mix) {
+    opts.push(["now", `Como suena ahora (${nowText()})`], ["all", "Las 4 voces por igual"]);
+    singing.forEach((v) => opts.push([`hl:${v.id}`, `${v.name}: destacada (las demás suaves)`]));
+    singing.forEach((v) => opts.push([`solo:${v.id}`, `${v.name}: sola`]));
+    opts.push(["each-hl", "Cada voz destacada, un archivo por voz"], ["each-solo", "Cada voz sola, un archivo por voz"]);
+  } else {
+    opts.push(["all", "Las 4 voces"]);
+    singing.forEach((v) => opts.push([`solo:${v.id}`, `Solo ${v.name}`]));
+    opts.push(["each-solo", "Cada voz en su propio archivo"]);
+  }
+  const keep = $("svWho").value;
+  const def = mix ? "now" : (pl.solo ? `solo:${pl.solo}` : "all");
+  $("svWho").innerHTML = opts.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("");
+  $("svWho").value = opts.some(([v]) => v === keep) ? keep : def;
+  $("svHint").textContent = {
+    audio: "Un mp3 con el piano. Se guarda en la carpeta del himno.",
+    video: "Después eliges los colores y lo que se ve. Se graba en tiempo real: tarda lo que dura el himno.",
+    pdf: "Hojas A4 para imprimir, en el tono elegido.",
+    xml: "Para abrirla en MuseScore o en la app de solfeo, en el tono elegido, con la letra de todas las estrofas.",
+    midi: "Una pista por voz, en el tono y la velocidad elegidos.",
+  }[what];
+  $("svGo").textContent = what === "video" ? "Siguiente…" : "Guardar";
+}
+async function runSave(what, who) {
+  if (!pl) return;
+  const [mode, v] = who.split(":");
+  const each = who.startsWith("each-") ? pl.data.voices.filter((x) => x.notes.length).map((x) => x.id) : null;
+  const name = (id) => pl.data.voices.find((x) => x.id === id).name;
+  if (what === "video") {
+    if (each) openVideoDialog({voices: each, mode: who === "each-solo" ? "solo" : "hl"},
+                              `Un video por cada voz (${who === "each-solo" ? "sola" : "destacada"})`);
+    else if (mode === "hl" || mode === "solo") openVideoDialog({voices: [v], mode}, `Video de ${name(v)}: ${mode === "solo" ? "sola" : "destacada"}`);
+    else openVideoDialog({voices: null, mode: mode === "all" ? "all" : null}, mode === "all" ? "Video de las 4 voces por igual" : `Video ${nowText() === "las 4 voces" ? "de las 4 voces" : "con " + nowText()}`);
+    return;
+  }
+  const one = async () => {
+    if (what === "audio") await downloadAudio(null);
+    else if (what === "pdf") await savePdf();
+    else if (what === "xml") await saveScoreAtTone();
+    else if (what === "midi") await saveMidi();
+  };
+  const keep = mixSnapshot();
+  try {
+    if (each) {
+      for (const [n, id] of each.entries()) {
+        mixSet(who === "each-hl" ? "hl" : "solo", id);
+        $("plLoad").textContent = `${n + 1} de ${each.length}: ${name(id)}…`;
+        await one();
+      }
+      $("plLoad").innerHTML = `✓ ${each.length} archivos guardados en la carpeta del himno
+        <button class="btn" style="padding:2px 10px;margin-left:6px" onclick='pywebview.api.open_result(${esc(JSON.stringify(pl.run_dir))}, "folder")'>Abrir carpeta</button>`;
+    } else {
+      if (mode === "all") mixSet("all");
+      else if (mode === "hl" || mode === "solo") mixSet(mode, v);
+      await one();
+    }
+  } finally { mixRestore(keep); }
 }
 async function saveMidi() {
   if (!pl) return;
-  $("plMidi").disabled = true; $("plLoad").textContent = "Guardando el MIDI…";
+  $("plSave").disabled = true; $("plLoad").textContent = "Guardando el MIDI…";
   try {
     const r = await pywebview.api.export_midi(pl.run_dir, pl.solo, pl.shift, tempoValue());
     savedNote(r, "MIDI");
-  } finally { $("plMidi").disabled = false; }
+  } finally { $("plSave").disabled = false; }
 }
 async function saveScoreAtTone() {
   if (!pl) return;
-  $("plScore").disabled = true; $("plLoad").textContent = "Guardando la partitura…";
+  $("plSave").disabled = true; $("plLoad").textContent = "Guardando la partitura…";
   try {
     const r = await pywebview.api.export_voice(pl.run_dir, pl.solo, pl.shift);
     savedNote(r, "Partitura");
-  } finally { $("plScore").disabled = false; }
+  } finally { $("plSave").disabled = false; }
 }
 function splitSides(on) {   // the highlighted voice to the left, the others to the right (headphones)
   if (!pl) return;
@@ -2610,7 +2672,6 @@ const DUR_ES = {"4": "redonda", "3": "blanca con puntillo", "2": "blanca", "3/2"
                 "3/4": "corchea con puntillo", "1/2": "corchea", "1/4": "semicorchea", "3/8": "semicorchea con puntillo",
                 "1/8": "fusa", "4/3": "blanca de tresillo", "2/3": "negra de tresillo", "1/3": "corchea de tresillo",
                 "1/6": "semicorchea de tresillo"};
-let ed = null;
 function parsePitch(p) {
   const m = /^([A-G])(#{1,2}|-{1,2})?(\d)$/.exec(p);
   const acc = m[2] || "";
@@ -2630,154 +2691,6 @@ function pitchEs(p) {
   return STEP_ES[x.step] + (x.alter > 0 ? "♯".repeat(x.alter) : "♭".repeat(-x.alter)) + x.octave;
 }
 function durEs(d) { return DUR_ES[d] || `${d} tiempos`; }
-function descEvents(evs) {
-  return evs.filter((e) => !e.filled).map((e) => e.pitch ? `${pitchEs(e.pitch)} ${durEs(e.duration)}` :
-    `silencio de ${durEs(e.duration)}`).join(" · ");
-}
-function openEditor(index, v) {
-  const m = findMeasure(index), info = m.voices[v];
-  const mine = (ntEdits[index] || {})[v];
-  const picked = (ntChoice[index] || {})[v];
-  const base = info.options.find((o) => picked ? o.key === picked : o.chosen) || info.options[0];
-  const events = JSON.parse(JSON.stringify(mine ? mine.events : base.events));
-  const reading = (info.options.find((o) => o.base) || base).events;
-  ed = {index, v, key: m.key || 0, events, reading: JSON.parse(JSON.stringify(reading)), baseKey: base.key,
-        baseEdited: !!base.edited};
-  $("edTitle").textContent = `Compás ${m.label} · ${info.name}`;
-  $("edImg").src = m.thumb || ""; $("edImg").style.display = m.thumb ? "block" : "none";
-  renderEditor(); $("ntEditor").showModal();
-}
-function renderEditor() {
-  $("edNotes").innerHTML = ed.events.map((e, i) => {
-    if (!e.pitch || e.filled) return "";
-    const x = parsePitch(e.pitch);
-    const orig = (ed.reading.find((r) => r.offset === e.offset && r.pitch) || {}).pitch;
-    const o = ed.reading.find((r) => r.offset === e.offset && r.pitch) || {};
-    const changed = (orig && orig !== e.pitch) || tiedNext(o) !== tiedNext(e);
-    return `<div class="ed-note ${changed ? "changed" : ""}">
-      <div class="nm">${pitchEs(e.pitch)}</div><div class="dur">${durEs(e.duration)}</div>
-      <button type="button" title="Subir" onclick="edMove(${i}, 1)">▲</button><button type="button" title="Bajar" onclick="edMove(${i}, -1)">▼</button><br>
-      <button type="button" class="${x.alter === -1 ? "on" : ""}" onclick="edAlter(${i}, -1)">♭</button><button type="button" class="${x.alter === 0 ? "on" : ""}" onclick="edAlter(${i}, 0)">♮</button><button type="button" class="${x.alter === 1 ? "on" : ""}" onclick="edAlter(${i}, 1)">♯</button><br>
-      <button type="button" class="${tiedNext(e) ? "on" : ""}" title="Ligada a la siguiente nota (debe ser la misma nota)"
-        onclick="edTie(${i})">⌒ ligada</button>
-    </div>`;
-  }).join("") || `<p class="hint">Esta voz no tiene notas en este compás.</p>`;
-  edPreview();
-}
-let edTimer = null;
-function edPreview() {
-  clearTimeout(edTimer);
-  edTimer = setTimeout(async () => {
-    const svg = await pywebview.api.render_voice(nt.run_dir, ed.index, ed.v, ed.events);
-    if (ed) { ed.svg = svg; $("edPreview").innerHTML = svg || `<p class="hint">(no se pudo dibujar)</p>`; }
-  }, 150);
-}
-function edMove(i, dir) {
-  const x = parsePitch(ed.events[i].pitch);
-  let s = STEPS.indexOf(x.step) + dir, oct = x.octave;
-  if (s > 6) { s = 0; oct++; } else if (s < 0) { s = 6; oct--; }
-  const step = STEPS[s];
-  ed.events[i].pitch = pitchName({step, alter: keyAlter(step, ed.key), octave: oct});
-  renderEditor();
-}
-function edAlter(i, a) {
-  const x = parsePitch(ed.events[i].pitch);
-  ed.events[i].pitch = pitchName({step: x.step, alter: a, octave: x.octave});
-  renderEditor();
-}
-function tiedNext(e) { return e.tie === "start" || e.tie === "continue"; }
-function edTie(i) {
-  const e = ed.events[i];
-  const later = ed.events.slice(i + 1).find((x) => !x.filled);
-  if (tiedNext(e)) {
-    e.tie = e.tie === "continue" ? "stop" : null;
-    if (later && later.pitch && (later.tie === "stop" || later.tie === "continue"))
-      later.tie = later.tie === "continue" ? "start" : null;
-  } else {
-    if (later && later.pitch !== e.pitch) {
-      alert("Solo se liga a la misma nota: la siguiente es " + (later.pitch ? pitchEs(later.pitch) : "un silencio") + ".");
-      return;
-    }
-    e.tie = e.tie === "stop" ? "continue" : "start";
-    if (later) later.tie = later.tie === "start" ? "continue" : "stop";
-  }
-  renderEditor();
-}
-function edReset() { ed.events = JSON.parse(JSON.stringify(ed.reading)); renderEditor(); }
-function edAccept() {
-  const changes = {};
-  const orig = (e) => ed.reading.find((r) => r.offset === e.offset) || {};
-  for (const e of ed.events) {
-    if (!e.pitch || e.filled) continue;
-    changes[e.offset] = tiedNext(e) === tiedNext(orig(e)) ? e.pitch : {pitch: e.pitch, tie: tiedNext(e)};
-  }
-  const same = ed.events.every((e) => !e.pitch || (orig(e).pitch === e.pitch && tiedNext(orig(e)) === tiedNext(e)));
-  ntEdits[ed.index] = ntEdits[ed.index] || {};
-  if (same && !ed.baseEdited) {
-    delete ntEdits[ed.index][ed.v];
-  } else {
-    // an empty map tells the window to go back to the readings for this voice
-    ntEdits[ed.index][ed.v] = {changes: same ? {} : changes, events: ed.events, svg: ed.svg,
-                               desc: same ? "Notas leídas (sin corrección)" : descEvents(ed.events)};
-    const m = findMeasure(ed.index), base = m.voices[ed.v].options.find((o) => o.key === ed.baseKey);
-    if (base && !base.chosen && !base.edited && !m.single)  // the correction goes on the version chosen
-      ntChoice[ed.index] = Object.assign({}, ntChoice[ed.index] || {}, {[ed.v]: base.key});
-  }
-  if (!Object.keys(ntEdits[ed.index]).length) delete ntEdits[ed.index];
-  ed = null; renderNotes();
-}
-async function gotoMeasure() {
-  const n = $("ntGoNum").value.trim();
-  if (!n) { $("ntGoMsg").textContent = "Escribe el número del compás."; return; }
-  $("ntGoMsg").textContent = "Abriendo el compás " + n + "…";
-  try {
-    const r = await pywebview.api.measure_data(nt.run_dir, n);
-    if (!r || !r.ok) { $("ntGoMsg").textContent = (r && r.error) || "No se pudo abrir ese compás."; return; }
-    const idx = r.measure.index;
-    if (!nt.measures.some((x) => x.index === idx)) {
-      nt.extra = [r.measure].concat((nt.extra || []).filter((x) => x.index !== idx));
-    }
-    renderNotes();
-    const card = document.getElementById("nt-m-" + idx);
-    if (card) {
-      card.scrollIntoView({behavior: "smooth", block: "start"});
-      card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1600);
-    }
-    $("ntGoMsg").textContent = `Compás ${r.measure.label} abierto abajo: pulsa «✎ Corregir» en la voz que quieras.`;
-  } catch (e) {
-    $("ntGoMsg").textContent = "Error al abrir el compás: " + (e && e.message ? e.message : e);
-  }
-}
-
-async function openNotes(runDir) {
-  show("home", false); show("notes", true);
-  $("ntTitle").textContent = "…"; $("ntStatus").textContent = "";
-  $("ntList").innerHTML = `<section class="card"><p class="hint">Preparando las versiones…</p></section>`;
-  ntChoice = {}; ntEdits = {};
-  const data = await pywebview.api.notes_data(runDir);
-  nt = Object.assign({run_dir: runDir}, data);
-  $("ntTitle").textContent = data.title;
-  renderNotes();
-}
-function closeNotes() {
-  if ((Object.keys(ntChoice).length || Object.keys(ntEdits).length) && !confirm("Hay cambios sin guardar. ¿Salir de todos modos?")) return;
-  show("notes", false); show("home", true); nt = null; loadHistory();
-}
-async function saveNotes() {
-  const edits = {};
-  for (const [i, per] of Object.entries(ntEdits))
-    for (const [v, e] of Object.entries(per)) (edits[i] = edits[i] || {})[v] = e.changes;
-  const res = await pywebview.api.save_notes(nt.run_dir, ntChoice, edits);
-  if (!res.ok) { $("ntStatus").textContent = res.error; return; }
-  $("ntSave").disabled = true;
-  $("ntStatus").textContent = "Rehaciendo la partitura con tus elecciones…";
-}
-async function onNotesDone(r) {
-  if (!nt) { loadHistory(); return; }
-  await openNotes(r.run_dir);
-  $("ntStatus").textContent = "✓ Guardado. Los compases que decidiste ya no salen como dudosos.";
-}
-
 function onSetup(p) {
   if (p.message) $("setupMsg").textContent = p.message;
   const bar = $("setupBar");
@@ -2821,9 +2734,6 @@ window.addEventListener("pywebviewready", async () => {
   $("go").addEventListener("click", start);
   $("openDir").addEventListener("click", () => pywebview.api.open_work_dir());
   $("rvBack").addEventListener("click", closeReview);
-  $("ntBack").addEventListener("click", closeNotes);
-  $("ntSave").addEventListener("click", saveNotes);
-  $("ntGo").addEventListener("click", gotoMeasure);
   $("plBack").addEventListener("click", closePlayer);
   $("lyBack").addEventListener("click", closeLyrics);
   $("lyNotes").addEventListener("click", () => { const r = ly.run_dir; ly = null; openLyricNotes(r); });
@@ -2845,10 +2755,14 @@ window.addEventListener("pywebviewready", async () => {
   $("leRebuild").addEventListener("click", rebuildScore);
   $("lySave").addEventListener("click", () => saveLyrics(false));
   $("lyReset").addEventListener("click", () => saveLyrics(true));
+  $("lyRebuild").addEventListener("click", rebuildLyrics);
   $("plPlay").addEventListener("click", () => play());
   $("plStop").addEventListener("click", stopPlay);
-  $("plSave").addEventListener("click", () => downloadAudio(null));
-  $("plVideo").addEventListener("click", () => openVideoDialog());
+  $("plSave").addEventListener("click", openSaveDialog);
+  // an open «Abrir ▾» menu closes when clicking anywhere else
+  document.addEventListener("click", (e) => document.querySelectorAll("details.menu[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; }));
+  $("svWhat").addEventListener("change", fillWho);
+  $("saveDlg").addEventListener("close", () => { if ($("saveDlg").returnValue === "ok") runSave($("svWhat").value, $("svWho").value); });
   $("vidDlg").addEventListener("close", () => { if ($("vidDlg").returnValue === "ok") startVideoFromDialog(); });
   $("vidCancel").addEventListener("click", cancelVideo);
   $("plBar").addEventListener("click", seekBar);
@@ -2863,15 +2777,14 @@ window.addEventListener("pywebviewready", async () => {
     $(id).addEventListener("change", () => { if (!$("plLoop").checked) $("plLoop").checked = true; loopChanged(); });
     $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $(id).blur(); } });
   }
-  $("plMidi").addEventListener("click", saveMidi);
-  $("plPdf").addEventListener("click", savePdf);
+
   try { if (localStorage.getItem("coralis.showScore") === "0") $("plShowScore").checked = false; } catch (e) { /* default */ }
   $("plShowScore").addEventListener("change", loadScoreView);
   $("plScoreView").addEventListener("click", (ev) => {
     const g = ev.target.closest && ev.target.closest("g.measure");
     if (g && sv && sv.index.has(g.id) && pl && !vid) goToMeasure(sv.index.get(g.id));
   });
-  $("plScore").addEventListener("click", saveScoreAtTone);
+
   $("plSplit").addEventListener("click", () => splitSides(true));
   $("plCenter").addEventListener("click", () => splitSides(false));
   $("plFaster").addEventListener("click", () => setTempo(tempoValue() + 1));
@@ -2880,10 +2793,8 @@ window.addEventListener("pywebviewready", async () => {
   });
   $("plFrom").addEventListener("change", () => { if (pl) { pl.resumeQ = null; if (!pl.playing) {
     $("plPlay").textContent = "▶ Reproducir"; showPos(pl.data.measures[Math.max(0, $("plFrom").value - 1)].start); } } });
-  $("ntGoNum").addEventListener("keydown", (e) => { if (e.key === "Enter") gotoMeasure(); });
-  $("edReset").addEventListener("click", edReset);
-  $("ntEditor").addEventListener("close", () => { if ($("ntEditor").returnValue === "ok" && ed) edAccept(); else ed = null; });
-  $("rvSave").addEventListener("click", saveReview);
+  $("rvSave").addEventListener("click", () => saveReview(false));
+  $("rvRebuild").addEventListener("click", rebuildReview);
   $("rvOnlySigns").addEventListener("change", renderReview);
   $("rvEdit").addEventListener("close", () => { if ($("rvEdit").returnValue === "ok") applyEdit(); });
   musescore = await pywebview.api.has_musescore();

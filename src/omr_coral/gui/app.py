@@ -194,8 +194,9 @@ class Api:
         return {"title": self._summary(run)["title"], "measures": measures, "warnings": warnings,
                 "saved": corrections.load(run).get("marks", {}), "jumps": list(corrections.JUMPS)}
 
-    def save_review(self, run_dir: str, changes: dict) -> dict:
-        """Store the answers and rebuild the result in the background (onReviewDone)."""
+    def save_review(self, run_dir: str, changes: dict, rebuild: bool = False) -> dict:
+        """Store the signs. Like the editor: saved at once; the score is rebuilt later (before it
+        is shown or given out), or now with rebuild=True (onReviewDone)."""
         from ..model import corrections
 
         if self._busy:
@@ -205,28 +206,10 @@ class Api:
         for key, fields_ in (changes or {}).items():
             data["marks"][str(key)] = fields_
         corrections.save(run, data)
-        self._busy = True
-        threading.Thread(target=self._revalidate, args=(run, "onReviewDone"), daemon=True).start()
-        return {"ok": True}
-
-    def notes_data(self, run_dir: str) -> dict:
-        """Doubtful measures: the image and, for each disputed voice, every version read."""
-        from ..model import corrections
-        from ..pipeline import validate_run
-
-        run = Path(run_dir)
-        self._fresh(run)
-        if not (run / "versiones.json").exists():
-            validate_run(run, self._cfg)
-        measures = json.loads((run / "versiones.json").read_text(encoding="utf-8"))
-        if not (run / "notas.json").exists():
-            validate_run(run, self._cfg)
-        keys = {m["index"]: m["key"] for m in json.loads((run / "notas.json").read_text(encoding="utf-8"))}
-        for m in measures:
-            m["thumb"] = _thumb(run / m.pop("crop"), width=760)
-            m["key"] = keys.get(m["index"], 0)
-        return {"title": self._summary(run)["title"], "measures": measures,
-                "saved": corrections.load(run).get("voices", {})}
+        if not rebuild:
+            (run / PENDING).write_text("Signos guardados; falta rehacer la partitura.\n", encoding="utf-8")
+            return {"ok": True, "pending": True}
+        return self.rebuild(run_dir, "onReviewDone")
 
     def _measure_meta(self, run: Path, index: int) -> dict | None:
         p = run / "notas.json"
@@ -259,31 +242,6 @@ class Api:
     def render_voice(self, run_dir: str, index: int, voice: str, events: list) -> str | None:
         meta = self._measure_meta(Path(run_dir), int(index))
         return self._render(meta, voice, events) if meta else None
-
-    def measure_data(self, run_dir: str, label: str) -> dict:
-        """Any measure, by the number the user sees (for «Ir al compás…»)."""
-        run = Path(run_dir)
-        self._fresh(run)
-        if not (run / "notas.json").exists():
-            from ..pipeline import validate_run
-            validate_run(run, self._cfg)
-        all_ = json.loads((run / "notas.json").read_text(encoding="utf-8"))
-        meta = next((m for m in all_ if str(m["label"]).lower() == str(label).strip().lower()), None)
-        if meta is None:
-            return {"ok": False, "error": f"No hay un compás «{label}» (van del {all_[0]['label']} al {all_[-1]['label']})."}
-        names = {v: {"name": n} for v, n in self._names(run).items()}
-        voices = {}
-        for v, evs in meta["voices"].items():
-            if not any(e.get("pitch") for e in evs):
-                continue
-            voices[v] = {"name": names[v]["name"], "options": [{
-                "key": "current", "votes": 0, "total": 0, "chosen": True, "events": evs,
-                "svg": self._render(meta, v, evs), "desc": ""}]}
-        crop = run / meta["crop"]
-        return {"ok": True, "measure": {"index": meta["index"], "label": meta["label"], "voices": voices,
-                                        "key": meta["key"],
-                                        "thumb": _thumb(crop, width=760) if crop.exists() else None,
-                                        "single": True}}
 
     def playback_data(self, run_dir: str) -> dict:
         """The file for practice, ready to play: per voice, its notes in quarter notes from the
@@ -356,7 +314,10 @@ class Api:
             for m in measures:
                 for _off, syl_text, syl in m.get("words", {}).get(str(n), []):
                     piece = syl_text.replace("‿", " ")
-                    text += piece + ("" if syl in ("begin", "middle") else " ")
+                    # as in the hymnal: «Cas-ti-llo fuer-te», a hyphen between the syllables of a word, so
+                    # that it shows on which note each one goes and where a space is missing («fuer-te-nues-tro»)
+                    joins = syl in ("begin", "middle") and not re.search(r"[.,;:!?»”)]$", piece)
+                    text += piece + ("-" if joins else " ")
             text = " ".join(text.split())
             # one line per phrase, so that it reads like the hymnal
             text = re.sub(r"([;:.!?])\s*(?=[^\s.,;:!?)»”])", r"\1\n", text)
@@ -364,8 +325,9 @@ class Api:
             blocks.append(f"{n}. {text}")
         return {"text": "\n\n".join(blocks), "from_file": False, "title": self._summary(run)["title"]}
 
-    def save_lyrics(self, run_dir: str, text: str | None) -> dict:
-        """Save the corrected words (None: back to what the OCR read) and rebuild the score."""
+    def save_lyrics(self, run_dir: str, text: str | None, rebuild: bool = False) -> dict:
+        """Save the corrected words (None: back to what the OCR read). Like the editor: the score is
+        rebuilt later, or now with rebuild=True (onLyricsDone)."""
         from ..pipeline import LYRICS_FILE
 
         if self._busy:
@@ -379,9 +341,10 @@ class Api:
             if not text.strip():
                 return {"ok": False, "error": "La letra está vacía."}
             own.write_text(text.strip() + "\n", encoding="utf-8")
-        self._busy = True
-        threading.Thread(target=self._revalidate, args=(run, "onLyricsDone"), daemon=True).start()
-        return {"ok": True}
+        if not rebuild:
+            (run / PENDING).write_text("Letra guardada; falta rehacer la partitura.\n", encoding="utf-8")
+            return {"ok": True, "pending": True}
+        return self.rebuild(run_dir, "onLyricsDone")
 
     # ------------------------------------------------------------------ words note by note
     def lyric_editor_data(self, run_dir: str) -> dict:
@@ -404,12 +367,17 @@ class Api:
                                               "total": o["total"], "chosen": o["chosen"], "edited": o.get("edited", False)}
                                              for o in info["options"] if not o.get("edited")]
                                          for v, info in vm["voices"].items()}
+        signs = {}
+        cp = run / "compases.json"
+        if cp.exists():
+            signs = {c["index"]: c.get("marks", {}) for c in json.loads(cp.read_text(encoding="utf-8"))}
         out = []
         for m in measures:
             lead = m.get("lyric_voice", "soprano")
             out.append({k: m[k] for k in ("index", "label", "number", "key", "time", "pickup", "bar_length", "duration")}
                        | {"voice": lead, "voices": m["voices"], "words": m.get("words", {}),
                           "vwords": m.get("vwords", {}), "own_words": m.get("own_words", False),
+                          "marks": signs.get(m["index"], {}),
                           "versions": {v: o for v, o in versions.get(m["index"], {}).items() if len(o) > 1}})
         lines = max([int(n) for m in measures for n in m.get("words", {})] + [1])
         from ..model import corrections
@@ -417,14 +385,15 @@ class Api:
         saved = corrections.load(run)
         return {"title": self._summary(run)["title"], "measures": out, "verses": lines,
                 "voice_names": self._names(run), "doubtful": self._doubtful_indices(run),
-                "structure": saved.get("structure") or [], "signatures": saved.get("signatures") or {}}
+                "structure": saved.get("structure") or [], "signatures": saved.get("signatures") or {},
+                "jumps": list(corrections.JUMPS)}
 
     def measure_thumb(self, run_dir: str, index: int) -> str | None:
         crop = Path(run_dir) / "report" / "img" / f"m{int(index):03d}.png"
         return _thumb(crop, width=1000) if crop.exists() else None
 
     def save_editor(self, run_dir: str, choices: dict, edits: dict, lyrics: dict, rebuild: bool = True,
-                    rhythm: dict | None = None, voice_lyrics: dict | None = None) -> dict:
+                    rhythm: dict | None = None, voice_lyrics: dict | None = None, marks: dict | None = None) -> dict:
         """Everything the editor changed, at once: versions picked, notes fixed, words typed.
         rebuild=False only saves (instant): the score is rebuilt later, before it is shown or
         given out, or when the user asks."""
@@ -459,6 +428,8 @@ class Api:
         for idx, lines in (lyrics or {}).items():
             for line, notes in lines.items():
                 typed.setdefault(str(idx), {})[str(line)] = notes
+        for idx, fields_ in (marks or {}).items():   # signs of a measure, set in the editor
+            data["marks"][str(idx)] = {f: v for f, v in fields_.items() if f in corrections.EDITABLE}
         corrections.save(run, data)
         if not rebuild:
             (run / PENDING).write_text("Correcciones guardadas; falta rehacer la partitura.\n", encoding="utf-8")
@@ -533,27 +504,13 @@ class Api:
         corrections.save(run, data)
         return self.rebuild(run_dir)
 
-    def rebuild(self, run_dir: str) -> dict:
+    def rebuild(self, run_dir: str, callback: str = "onEditorDone") -> dict:
         if self._busy:
             return {"ok": False, "error": "Ya hay una conversión en marcha."}
+        if callback not in ("onEditorDone", "onReviewDone", "onLyricsDone"):
+            callback = "onEditorDone"
         self._busy = True
-        threading.Thread(target=self._revalidate, args=(Path(run_dir), "onEditorDone"), daemon=True).start()
-        return {"ok": True}
-
-    def save_lyric_notes(self, run_dir: str, edits: dict) -> dict:
-        from ..model import corrections
-
-        if self._busy:
-            return {"ok": False, "error": "Ya hay una conversión en marcha."}
-        run = Path(run_dir)
-        data = corrections.load(run)
-        typed = data.setdefault("lyrics", {})
-        for idx, lines in (edits or {}).items():
-            for line, notes in lines.items():
-                typed.setdefault(str(idx), {})[str(line)] = notes
-        corrections.save(run, data)
-        self._busy = True
-        threading.Thread(target=self._revalidate, args=(run, "onLyricNotesDone"), daemon=True).start()
+        threading.Thread(target=self._revalidate, args=(Path(run_dir), callback), daemon=True).start()
         return {"ok": True}
 
     def _names(self, run: Path) -> dict:
@@ -766,10 +723,6 @@ class Api:
                         "notes": [[float(e.offset), float(e.duration)] for e in evs if not e.is_rest]})
         return out
 
-    def choose_folder(self) -> str | None:
-        res = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=str(work_dir()))
-        return (res if isinstance(res, str) else res[0]) if res else None
-
     def video_begin(self, run_dir: str) -> str:
         """Start receiving a video, piece by piece. Returns a token (the temporary file)."""
         import tempfile
@@ -817,30 +770,6 @@ class Api:
         dest = _free_name(Path(run_dir), name.rsplit(".", 1)[0], "mp3")
         dest.write_bytes(base64.b64decode(data_b64))
         return {"ok": True, "path": str(dest), "folder": str(dest.parent)}
-
-    def save_notes(self, run_dir: str, choices: dict, edits: dict | None = None) -> dict:
-        from ..model import corrections
-
-        if self._busy:
-            return {"ok": False, "error": "Ya hay una conversión en marcha."}
-        run = Path(run_dir)
-        data = corrections.load(run)
-        voices = data.setdefault("voices", {})
-        for key, per_voice in (choices or {}).items():
-            voices.setdefault(str(key), {}).update(per_voice)
-        fixed = data.setdefault("edits", {})
-        for key, per_voice in (edits or {}).items():
-            for v, notes in per_voice.items():
-                if notes:
-                    fixed.setdefault(str(key), {})[v] = notes
-                else:  # back to the notes of the readings
-                    fixed.get(str(key), {}).pop(v, None)
-            if not fixed.get(str(key)):
-                fixed.pop(str(key), None)
-        corrections.save(run, data)
-        self._busy = True
-        threading.Thread(target=self._revalidate, args=(run, "onNotesDone"), daemon=True).start()
-        return {"ok": True}
 
     def _revalidate(self, run: Path, callback: str) -> None:
         from ..pipeline import validate_run
@@ -1080,8 +1009,40 @@ def main() -> int:
     def bind(win):
         win.dom.document.events.drop += DOMEventHandler(on_drop, True, True)
 
-    webview.start(bind, window, icon=str(HERE / "coralis.ico"))
+    _mac_app_name()
+    webview.start(bind, window, icon=str(HERE / "coralis.ico"), localization=MENUS_ES)
     return 0
+
+
+# the Mac menu bar in Spanish (pywebview's are in English); «Edición» must stay: ⌘C ⌘V ⌘A live there
+MENUS_ES = {
+    "global.quitConfirmation": "¿Seguro que quieres salir?", "global.ok": "Aceptar", "global.quit": "Salir",
+    "global.cancel": "Cancelar", "global.saveFile": "Guardar archivo",
+    "cocoa.menu.about": "Acerca de", "cocoa.menu.services": "Servicios", "cocoa.menu.view": "Visualización",
+    "cocoa.menu.edit": "Edición", "cocoa.menu.hide": "Ocultar", "cocoa.menu.hideOthers": "Ocultar otros",
+    "cocoa.menu.showAll": "Mostrar todo", "cocoa.menu.quit": "Salir de", "cocoa.menu.fullscreen": "Pantalla completa",
+    "cocoa.menu.cut": "Cortar", "cocoa.menu.copy": "Copiar", "cocoa.menu.paste": "Pegar",
+    "cocoa.menu.selectAll": "Seleccionar todo",
+}
+
+
+def _mac_app_name() -> None:
+    """Run from the code (not the .app), macOS calls the app «Python» in the menu bar: name it Coralis.
+    It has to be set before the window library starts the app."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from Foundation import NSBundle
+
+        bundle = NSBundle.mainBundle()
+        for info in (bundle.localizedInfoDictionary(), bundle.infoDictionary()):
+            if info is not None:
+                info["CFBundleName"] = APP_NAME
+        import AppKit
+
+        AppKit.NSWindow.setAllowsAutomaticWindowTabbing_(False)   # one window: no «Mostrar barra de pestañas»
+    except Exception:  # noqa: BLE001  (only the name in the menu bar)
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
