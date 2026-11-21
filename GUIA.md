@@ -229,6 +229,24 @@ En Windows, **Ctrl** en lugar de ⌘ y **Alt** en lugar de ⌥.
 | ← → al principio o al final | Nota anterior / siguiente |
 | Intro | Compás siguiente |
 
+## Aprende
+
+El botón **«🎓 Aprende»** (arriba, en la pantalla de inicio) abre tres apartados con lecciones cortas. Elige el apartado
+arriba y la lección a la izquierda; «◀ Anterior / Siguiente ▶» al final de cada una.
+
+- **Aprende música:** lo básico para leer un himno, con ejemplos que suenan con el piano, y una práctica para
+  reconocer notas en clave de sol y de fa.
+- **¿Quieres dirigir un coro?:** del gesto básico al ensayo y el concierto. El ejercicio de **patrones** dibuja el
+  compás (1, 2, 3, 4 o 6/8) con un punto que sigues con la mano, al ritmo del metrónomo; puedes cambiar la
+  articulación (legato, marcato, staccato), el tamaño (p, mf, f), hacer un ritardando o accelerando, y activar
+  **«Entradas y cortes al azar»** para practicar dar entradas a cada voz. También: **dar el tono** con el piano,
+  dibujos de **cómo acomodar al coro** y una **lista para el concierto** que se queda guardada.
+- **Ejercicios de vocalización:** postura, calentamiento del cuerpo y una **rutina de 10-15 minutos** (cada paso
+  abre su lección), **respiración guiada**, **sostener la nota** con contador y récord, el **acorde voz por voz**
+  para el empaste, y **vocalises con el piano**: eliges el ejercicio, tu voz, desde y hasta qué nota, la dirección
+  (subir, bajar o las dos) y la velocidad. El piano puede tocar la melodía, dar solo el acorde (a capella), dar solo
+  el primer acorde para que encuentres el siguiente tono de oído, o comprobar la última nota.
+
 ## 9. Dónde se guarda todo
 
 Todo va a **Documentos/Coralis**, una carpeta por himno. Ahí están el archivo para practicar

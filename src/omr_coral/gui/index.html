@@ -182,6 +182,46 @@
   details.menu .menu-list button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0;
     background: transparent; color: inherit; font: inherit; border-radius: 7px; cursor: pointer; }
   details.menu .menu-list button:hover { background: var(--accent-soft); }
+  .ln-grid { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; margin-top: 14px; align-items: start; }
+  @media (max-width: 760px) { .ln-grid { grid-template-columns: 1fr; } }
+  #lnList button { display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 4px; border: 1px solid var(--line);
+    border-radius: 9px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  #lnList button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  #lnBody { line-height: 1.6; font-size: 16px; }
+  #lnBody h3 { margin: 0 0 8px; font-size: 20px; }
+  #lnBody li { margin: 4px 0; }
+  .ln-ex { margin: 10px 0 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .ln-svg { background: #fff; border-radius: 10px; padding: 4px 8px; color: #111; }
+  .ln-svg svg { display: block; max-width: 100%; height: auto; }
+  .ln-ex .ln-svg svg { max-height: 150px; }
+  .ln-t { border-collapse: collapse; margin: 8px 0; }
+  .ln-t td, .ln-t th { padding: 4px 14px 4px 0; border-bottom: 1px solid var(--line); text-align: left; }
+  .ln-widget { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 12px; background: var(--card); }
+  .qz-note { width: 220px; margin: 12px auto; }
+  .qz-btns .btn { min-width: 64px; font-size: 17px; }
+  .br-stage { position: relative; height: 300px; display: flex; align-items: center; justify-content: center; }
+  .br-circle { position: absolute; width: 260px; height: 260px; border-radius: 50%; background: var(--accent-soft);
+    border: 3px solid var(--accent); transform: scale(.45); }
+  .br-text { position: relative; text-align: center; font-size: 22px; font-weight: 700; }
+  .br-text #brCount { font-size: 15px; font-weight: 400; color: var(--muted); }
+  .vc-now { text-align: center; margin: 10px 0; }
+  #vcKey { font-size: 22px; font-weight: 700; }
+  #vcSyl span { display: inline-block; padding: 2px 6px; border-radius: 6px; font-size: 18px; }
+  #vcSyl span.on { background: var(--accent); color: var(--accent-ink); }
+  #vcStaff { max-width: 560px; margin: 0 auto; }
+  #lnBody h4 { margin: 14px 0 4px; font-size: 16px; }
+  .ln-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 10px 0; }
+  .ln-seats figure { margin: 0; background: #fff; color: #222; border-radius: 10px; padding: 8px; }
+  .ln-seats svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .ln-seats figcaption { font-size: 14px; margin-top: 6px; line-height: 1.4; }
+  .ch-voices { display: grid; gap: 6px; max-width: 360px; margin: 12px auto; }
+  .ch-voices div { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 12px;
+    border-radius: 10px; border: 1px solid var(--line); opacity: .45; }
+  .ch-voices div.on { opacity: 1; background: var(--accent-soft); border-color: var(--accent); }
+  .rt-list { margin: 0; padding-left: 22px; }
+  .rt-list li { display: flex; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .rt-list li span:first-child { flex: 1; }
+  .hd-count { text-align: center; font-size: 64px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 10px 0; }
   .keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   @media (max-width: 700px) { .keys-grid { grid-template-columns: 1fr; } }
   .keys-grid h3 { margin: 0 0 6px; font-size: 15px; }
@@ -243,6 +283,8 @@
       <h1>Coralis</h1>
       <p class="sub">Partituras corales a MusicXML: convierte un himno (PDF o fotos) en un archivo con las 4 voces y la letra.</p>
     </div>
+    <button class="btn" id="learnBtn" style="margin-left:auto;flex:none" onclick="openLearn()"
+      title="Aprende música, dirección coral y ejercicios de vocalización">🎓 Aprende</button>
   </header>
 
   <!-- 0. first run: download the score readers -->
@@ -463,6 +505,21 @@
     </section>
   </div>
 
+  <!-- «Aprende»: music basics, conducting a choir, vocal warm-ups (learn.js) -->
+  <div id="learn" class="hidden">
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">🎓 Aprende</h2>
+        <button class="btn" onclick="closeLearn()">← Volver</button>
+      </div>
+      <div class="row" id="lnTabs" style="gap:8px;margin-top:12px;flex-wrap:wrap"></div>
+      <div class="ln-grid">
+        <nav id="lnList"></nav>
+        <article id="lnBody"></article>
+      </div>
+    </section>
+  </div>
+
   <dialog id="keysDlg" style="max-width:720px">
     <form method="dialog">
       <h2 style="margin-top:0">Atajos del editor</h2>
@@ -634,7 +691,11 @@ function setLyrics(l) {
   $("clearLyrics").classList.toggle("hidden", !l);
 }
 
-function show(id, on) { $(id).classList.toggle("hidden", !on); }
+function show(id, on) {
+  $(id).classList.toggle("hidden", !on);
+  const b = $("learnBtn");   // «Aprende» opens from the home screen only
+  if (b) b.style.visibility = $("home").classList.contains("hidden") ? "hidden" : "";
+}
 function setBusy(b) {
   for (const id of ["go", "pickLyrics", "title"]) $(id).disabled = b || (id === "go" && !files.length);
   $("drop").style.pointerEvents = b ? "none" : "";
@@ -2802,5 +2863,6 @@ window.addEventListener("pywebviewready", async () => {
   checkUpdate();  // in the background: the window does not wait for GitHub
 });
 </script>
+<script src="learn.js"></script>
 </body>
 </html>

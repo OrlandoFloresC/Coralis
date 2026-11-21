@@ -619,6 +619,47 @@ class Api:
                 events.append([k, round(float(e["qstamp"]) - start, 6), e.get("on", []), e.get("off", [])])
         return {"ok": True, "pages": pages, "events": events, "measures": len(order), "name": prep["stem"]}
 
+    def learn_example(self, spec: dict) -> dict:
+        """«Aprende»: a short example written in tinyNotation (c4 = middle C, quarter note; c'8 an
+        octave up, eighth; r4 rest; c4_ma a syllable), drawn on its staff, with its notes to play:
+        {"svg", "notes": [[offset in quarters, duration, midi], ...]}."""
+        import verovio
+        from music21 import clef, converter, key, meter, stream
+
+        from ..model.export import to_musicxml_string
+
+        try:
+            time = spec.get("time")
+            part = converter.parse("tinyNotation: " + (f"{time} " if time else "4/4 ") + spec.get("tiny", ""))
+            measures = list(part.getElementsByClass(stream.Measure))
+            if measures:
+                first = measures[0]
+                for c in list(first.getElementsByClass(clef.Clef)):
+                    first.remove(c)
+                first.insert(0, {"F": clef.BassClef, "G8": clef.Treble8vbClef}.get(spec.get("clef"), clef.TrebleClef)())
+                if spec.get("key"):
+                    first.insert(0, key.KeySignature(int(spec["key"])))
+                if not time:   # a note or two, no meter to show
+                    for ts in list(first.getElementsByClass(meter.TimeSignature)):
+                        ts.style.hideObjectOnPrint = True
+            notes = []
+            for n in part.recurse().notes:
+                off = float(n.getOffsetInHierarchy(part))
+                for p in getattr(n, "pitches", [n.pitch]):
+                    notes.append([off, float(n.quarterLength), int(p.midi)])
+            verovio.enableLog(verovio.LOG_ERROR)
+            tk = verovio.toolkit(False)
+            tk.setResourcePath(str(Path(verovio.__file__).parent / "data"))
+            tk.setOptions({"adjustPageHeight": True, "adjustPageWidth": True, "breaks": "none", "header": "none",
+                           "footer": "none", "svgViewBox": True, "scale": int(spec.get("scale", 45)),
+                           "pageMarginLeft": 20, "pageMarginRight": 20, "pageMarginTop": 10, "pageMarginBottom": 10})
+            if not tk.loadData(to_musicxml_string(stream.Score([part]))):
+                return {"ok": False, "error": "No se pudo dibujar el ejemplo."}
+            return {"ok": True, "svg": tk.renderToSVG(1), "notes": notes}
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            return {"ok": False, "error": f"No se pudo dibujar el ejemplo: {e}"}
+
     def pdf_begin(self, run_dir: str) -> str:
         """Start receiving the pages of a PDF (each one a picture of an A4 page)."""
         folder = tempfile.mkdtemp(prefix="coralis-pdf-")

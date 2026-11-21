@@ -1,5 +1,5 @@
 ; Windows installer of Coralis (Inno Setup 6).
-;   iscc /DAppVersion=0.9.0 packaging\coralis.iss   ->   Coralis-0.9.0-Windows.exe
+;   iscc /DAppVersion=0.10.0 packaging\coralis.iss   ->   Coralis-0.10.0-Windows.exe
 ; Packs dist\Coralis (made by PyInstaller). Audiveris and homr are not inside: Coralis downloads
 ; them on its first run. Installs for the current user only: no administrator rights needed.
 

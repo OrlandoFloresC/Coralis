@@ -6,6 +6,22 @@ Lo nuevo de cada versión. La guía completa de uso está en [GUIA.md](https://g
 > dudosos para que los revises. Compara siempre el resultado con la partitura impresa: la decisión final la
 > tienes tú.
 
+## 0.10.0 — noviembre de 2026
+
+- **🎓 Aprende** (botón arriba, en la pantalla de inicio), con tres apartados:
+  - **Aprende música** (9 lecciones): pentagrama y claves, alteraciones, figuras, compás, puntillo y ligadura, escalas e
+    intervalos, armadura, leer un himno a 4 voces; ejemplos que suenan con el piano y práctica para reconocer notas.
+  - **¿Quieres dirigir un coro?** (18 lecciones): postura y mano, práctica frente al espejo, ictus y rebote, patrones de
+    1, 2, 3, 4 y 6/8 animados con metrónomo (con articulación, tamaño, ritardando/accelerando y **entradas y cortes al
+    azar**), planos de dirección, entradas, cortes y calderón, independencia de las manos, dar el tono, preparar la pieza
+    y el plan de ensayo, organizar el ensayo, escuchar y corregir, cómo acomodar al coro (con dibujos), la prueba de voz y
+    una lista para el concierto.
+  - **Ejercicios de vocalización** (20 lecciones): postura, calentar el cuerpo, una rutina de 10-15 minutos, respiración
+    guiada, diafragma, **sostener la nota con récord**, mandíbula y garganta, vocales, **empaste voz por voz**, de grave a
+    agudo sin quiebres, resonancia, labios, dinámica, agilidad (que acelera), afinación y oído (**el siguiente tono de
+    oído**, o a capella con comprobación), ritmo, dicción, respirar en la frase y cuidar la voz. **28 vocalises con
+    piano** que suben o bajan medio tono cada vez, por voz y velocidad.
+
 ## 0.9.0 — noviembre de 2026
 
 - Editor: la figura con el teclado, como en MuseScore pero con ⌥ (Alt en Windows): ⌥7 redonda, ⌥6 blanca,
