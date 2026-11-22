@@ -119,6 +119,14 @@
 
   .result h3 { margin: 0 0 4px; font-size: 18px; }
   .stats { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+  .histbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 10px; }
+  .histbar .seg { display: flex; border: 1px solid var(--line, #ccc); border-radius: 8px; overflow: hidden; }
+  .histbar .seg button { border: 0; background: transparent; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; color: inherit; }
+  .histbar .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .histbar .seg small { opacity: .7; font-weight: 400; }
+  .histbar input[type=search] { flex: 1; min-width: 140px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line, #ccc); font: inherit; font-size: 13px; background: transparent; color: inherit; }
+  .star { border: 0; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; color: #b8b8b8; padding: 0 4px 0 0; }
+  .star.on { color: #e3a400; }
   .pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; }
   .pill.ok { background: var(--accent-soft); color: var(--accent); }
   .pill.warn { background: var(--warn-soft); color: var(--warn); }
@@ -344,6 +352,14 @@
   <!-- history -->
   <section class="card home-right">
     <h2>Himnos convertidos <a class="link" id="openDir" style="float:right">Abrir carpeta</a></h2>
+    <div class="histbar">
+      <div class="seg" role="tablist">
+        <button type="button" data-hf="all" onclick="setHistFilter('all')">Todos <small id="hfAll"></small></button>
+        <button type="button" data-hf="fav" onclick="setHistFilter('fav')">★ Favoritos <small id="hfFav"></small></button>
+        <button type="button" data-hf="att" onclick="setHistFilter('att')" title="Los que tienen más compases por revisar, primero">Necesitan atención <small id="hfAtt"></small></button>
+      </div>
+      <input type="search" id="histSearch" placeholder="Buscar por nombre…" oninput="renderHistory()">
+    </div>
     <ul class="hist" id="hist"><li class="empty">Todavía no has convertido ninguno.</li></ul>
   </section>
   </div>
@@ -718,10 +734,10 @@ function statsLine(r) {
   return parts.join(" · ");
 }
 function doubtPill(r) {
-  if (r.pending) return `<span class="pill warn" title="Se rehace sola al abrirla, escucharla o descargarla">cambios sin rehacer</span>`;
   const n = (r.doubtful || []).length;
-  return n ? `<span class="pill warn">${n} compás${n > 1 ? "es" : ""} por revisar</span>`
-           : `<span class="pill ok">sin dudas</span>`;
+  const pend = r.pending ? ` <span class="pill warn" title="Se rehace sola al abrirla, escucharla o descargarla">cambios sin rehacer</span>` : "";
+  return (n ? `<span class="pill warn">${n} compás${n > 1 ? "es" : ""} por revisar</span>`
+            : `<span class="pill ok">sin dudas</span>`) + pend;
 }
 function openBtns(r) {
   const d = esc(JSON.stringify(r.run_dir));
@@ -774,13 +790,48 @@ async function start() {
   }, 1000);
 }
 
+// the list of hymns: all / ★ favourites / needing attention (most doubtful measures first), and a search
+let histItems = [];
+let histFilter = (() => { try { return localStorage.getItem("histFilter") || "all"; } catch (e) { return "all"; } })();
+
+function attention(r) {   // share of measures to check (the most needing first)
+  const n = (r.doubtful || []).length;
+  return n ? n / Math.max(1, r.measures || n) : 0;
+}
+function setHistFilter(f) {
+  histFilter = f;
+  try { localStorage.setItem("histFilter", f); } catch (e) { /* private window */ }
+  renderHistory();
+}
+async function toggleFavorite(i) {
+  const r = histItems[i];
+  if (await pywebview.api.set_favorite(r.run_dir, !r.favorite)) { r.favorite = !r.favorite; renderHistory(); }
+}
 async function loadHistory() {
-  const items = await pywebview.api.history();
+  histItems = await pywebview.api.history();
+  renderHistory();
+}
+function renderHistory() {
   const ul = $("hist");
-  if (!items.length) { ul.innerHTML = `<li class="empty">Todavía no has convertido ninguno.</li>`; return; }
-  ul.innerHTML = items.map((r) => `
+  for (const b of document.querySelectorAll(".histbar [data-hf]")) b.classList.toggle("on", b.dataset.hf === histFilter);
+  $("hfAll").textContent = histItems.length ? `(${histItems.length})` : "";
+  $("hfFav").textContent = `(${histItems.filter((r) => r.favorite).length})`;
+  $("hfAtt").textContent = `(${histItems.filter((r) => attention(r) > 0).length})`;
+  if (!histItems.length) { ul.innerHTML = `<li class="empty">Todavía no has convertido ninguno.</li>`; return; }
+  const q = ($("histSearch").value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let rows = histItems.map((r, i) => [r, i]);
+  if (histFilter === "fav") rows = rows.filter(([r]) => r.favorite);
+  if (histFilter === "att") rows = rows.filter(([r]) => attention(r) > 0).sort((a, b) => attention(b[0]) - attention(a[0]));
+  if (q) rows = rows.filter(([r]) => r.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q));
+  if (!rows.length) {
+    ul.innerHTML = `<li class="empty">${histFilter === "fav" && !q ? "Todavía no marcas ninguno con ★. Toca la estrella de un himno para tenerlo aquí."
+      : histFilter === "att" && !q ? "Ninguno tiene compases por revisar." : "Ninguno coincide con la búsqueda."}</li>`;
+    return;
+  }
+  ul.innerHTML = rows.map(([r, i]) => `
     <li>
-      <div class="t"><b>${esc(r.title)}</b><small>${esc(r.when)} · ${esc(statsLine(r))}</small></div>
+      <div class="t"><button type="button" class="star${r.favorite ? " on" : ""}" title="${r.favorite ? "Quitar de favoritos" : "Marcar como favorito"}"
+        onclick="toggleFavorite(${i})">${r.favorite ? "★" : "☆"}</button><b>${esc(r.title)}</b><small>${esc(r.when)} · ${esc(statsLine(r))}</small></div>
       ${doubtPill(r)}
       <div class="row">${openBtns(r)}</div>
     </li>`).join("");

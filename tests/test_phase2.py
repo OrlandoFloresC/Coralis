@@ -121,10 +121,10 @@ def test_duration_error_is_flagged(tmp_path):
 
 def test_range_error_is_flagged(tmp_path):
     tb = [list(m) for m in TB]
-    tb[2] = [(["B-1", "D4"], 2), (["C3", "C4"], 1)]  # bass B♭1: far below E2
+    tb[2] = [(["E1", "D4"], 2), (["C3", "C4"], 1)]  # bass E1: far below C2 (a reading error, not a low bass)
     cs = build_choral_score(_write(_hymn(SA, tb), tmp_path))
     issues = [i for i in run_rules(cs, CFG) if i.rule == "rango"]
-    assert [(i.measure, i.voice, i.severity) for i in issues] == [(2, "bass", "error")]  # 6 semitones out
+    assert [(i.measure, i.voice, i.severity) for i in issues] == [(2, "bass", "error")]  # 8 semitones out
 
 
 def test_isolated_accidental_is_flagged_but_inflection_is_not(tmp_path):
@@ -142,3 +142,17 @@ def test_lost_voice_unison_is_flagged(tmp_path):
     cs = build_choral_score(_write(_hymn(sa, TB), tmp_path))
     issues = [(i.measure, i.voice) for i in run_rules(cs, CFG) if i.rule == "unisono"]
     assert issues == [(2, "alto")]
+
+
+def test_a_leap_after_a_rest_is_a_new_phrase():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.score import ChoralScore, Event, Measure
+    from omr_coral.rules import melody
+
+    m = Measure(index=0, system=1, page=None, staves=[])
+    m.voices = {"soprano": [Event(Fr(0), Fr(1), "C4", 60), Event(Fr(1), Fr(1)), Event(Fr(2), Fr(1), "B-4", 70)]}
+    assert not melody.check(ChoralScore(Path("x"), [m], []), {})
+    m.voices = {"soprano": [Event(Fr(0), Fr(1), "C4", 60), Event(Fr(1), Fr(1), "B-4", 70)]}
+    assert melody.check(ChoralScore(Path("x"), [m], []), {})

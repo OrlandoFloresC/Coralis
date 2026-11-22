@@ -206,7 +206,7 @@ def _echoes_line_1(cs: ChoralScore, n: int) -> bool:
     """Line n repeats line 1's words wherever it appears: the words of other voices in a
     chorus («¿Cómo podré estar triste?»: the men's «Feliz cantando alegre» under their own
     notes), not another stanza."""
-    same = total = 0
+    same = total = syl_same = syl_total = 0
     for m in cs.measures:
         words = {}
         for evs in m.voices.values():
@@ -217,8 +217,13 @@ def _echoes_line_1(cs: ChoralScore, n: int) -> bool:
         if words.get(n):
             total += 1
             line, first = words[n], words.get(1, {})
-            same += sum(first.get(off) == t for off, t in line.items()) >= len(line) / 2
-    return total > 0 and same >= 0.6 * total
+            equal = sum(first.get(off) == t for off, t in line.items())
+            same += equal >= len(line) / 2
+            syl_same += equal
+            syl_total += len(line)
+    # and most of its syllables too: two stanzas that share a refrain line («Bus-car a los per-di-dos»
+    # in both, «es nuestro gran deber» / «no importa dónde estén» in between) are not an echo
+    return total > 0 and same >= 0.6 * total and syl_same >= 0.75 * syl_total
 
 
 def lyric_line(cs: ChoralScore, steps: list[Step]) -> dict:
@@ -234,7 +239,11 @@ def lyric_line(cs: ChoralScore, steps: list[Step]) -> dict:
         return max((n for i in indices for evs in cs.measures[i].voices.values()
                     for e in evs for n in e.lyrics if n in real), default=0)
 
-    once = lines(i for i in range(len(cs.measures)) if i not in repeated)
+    # the measure right before a «|:» holds the upbeat into the repeated passage: its words on every
+    # line belong to the passes («Buscar a los perdidos»: «Bus-» printed on both lines in c.32)
+    upbeat = {i for i in range(len(cs.measures) - 1) if cs.measures[i + 1].marks.repeat_start}
+    once = (lines(i for i in range(len(cs.measures)) if i not in repeated and i not in upbeat)
+            or min(1, lines(i for i in range(len(cs.measures)) if i not in repeated)))
     twice = lines(repeated)
     if repeated and twice > once >= 1:
         return {"stanzas": once, "shift": once}

@@ -131,6 +131,7 @@ class Staff:
     lyrics: dict[Fraction, dict[int, tuple[str, str]]]  # onset -> verse -> syllable
     marks: Marks = field(default_factory=Marks)  # staff-bound marks use group "" until assigned
     texts: list = field(default_factory=list)  # [(offset, text)]: words printed as plain text
+    text_below: list = field(default_factory=list)  # [(offset, text, y)]: plain text under the staff, y = height
 
     @property
     def has_notes(self) -> bool:
@@ -224,6 +225,14 @@ def _read_staff_measure(m: stream.Measure, part_index: int, pos: int, state: dic
                                       layer=layer_id, source_id=id(el)))
                 continue
             notes = list(el.notes) if el.isChord else [el]
+            # a staff Audiveris took for a percussion staff gives «unpitched» notes: their place on
+            # the staff still tells the pitch («Todo lo encuentro en Cristo»; the whole reading was lost)
+            for n in notes:
+                if not hasattr(n, "pitch") and hasattr(n, "displayPitch"):
+                    n.pitch = n.displayPitch()
+            notes = [n for n in notes if hasattr(n, "pitch")]
+            if not notes:
+                continue
             notes.sort(key=lambda n: n.pitch.ps)
             # In a chord each note carries its own tie (soprano tied, alto not).
             ties = [(n.tie.type if n.tie else None) for n in notes]
@@ -237,10 +246,12 @@ def _read_staff_measure(m: stream.Measure, part_index: int, pos: int, state: dic
                     lyrics.setdefault(off, {})[ly.number or 1] = (ly.text.strip(), ly.syllabic or "single")
         layers.append(layer)
     marks = _read_marks(m)
-    texts = [(F(t.getOffsetInHierarchy(m)), str(t.content)) for t in m.recurse().getElementsByClass("TextExpression")
-             if t.content and not _is_sign_text(str(t.content))]
+    plain = [t for t in m.recurse().getElementsByClass("TextExpression") if t.content and not _is_sign_text(str(t.content))]
+    texts = [(F(t.getOffsetInHierarchy(m)), str(t.content)) for t in plain]
+    below = [(F(t.getOffsetInHierarchy(m)), str(t.content), float(t.style.absoluteY)) for t in plain
+             if getattr(t, "placement", None) == "below" and isinstance(t.style.absoluteY, (int, float))]
     return Staff(part_index, pos, state["clef"], state["time"], state["key"], tempo, layers, lyrics,
-                 marks, texts)
+                 marks, texts, below)
 
 
 def _is_sign_text(text: str) -> bool:
@@ -399,18 +410,46 @@ def _mark_slurs(score: stream.Score, per_part: list[list["Staff"]]) -> None:
                         raw.slur_cont = True
 
 
-def _voice_from(primary, fallbacks, which: str, length: Fraction) -> list[Event]:
+def _voice_from(primary, fallbacks, which: str, length: Fraction, rests_first: bool = False) -> list[Event]:
     """Notes of `primary`, gaps filled with notes of `fallbacks`, remaining gaps as rests.
 
     Order of precedence: this voice's notes, the other voice's notes (a shared note head),
     this voice's printed rests (a voice entering late), the other voice's rests (one rest
     printed for both voices of the staff, «Bálsamo existe»). Giving this voice's rests
     precedence over the other voice's notes was tried: homr often gives a rest to the wrong
-    voice, and «Jamás podrá alguien separarnos» lost bass notes."""
+    voice, and «Jamás podrá alguien separarnos» lost bass notes.
+
+    rests_first (Audiveris, which assigns voices well): this voice's printed rests come before the
+    other voice's notes («Yo no te dejaré» c.21-22: the bass rests under the baritone's notes; it
+    used to sing the baritone's notes)."""
     events: list[Event] = []
     spans: list[tuple[Fraction, Fraction]] = []
+    # this voice's printed rests: the other voice's notes over one of them are borrowed only if
+    # they fill it exactly (a rest the engine gave to the wrong voice under shared note heads);
+    # a note running past the rest, or leaving part of it empty, means the rest is real («Jesus Rose
+    # of Sharon» c.17: the alto rests a half while the soprano sings a quarter and a tied half;
+    # «Somos uno con Cristo» c.18: the upper voice rests a quarter over the alto's eighth)
+    own_rests = [(r.offset, r.offset + r.duration) for r in primary if not r.pitches and not r.hidden]
 
-    def take(layer, notes: bool) -> None:
+    def real_rest(fallback_layer) -> list[tuple[Fraction, Fraction]]:
+        keep = []
+        for a0, a1 in own_rests:
+            over = sorted((x for x in fallback_layer if x.pitches and x.offset < a1 and a0 < x.offset + x.duration),
+                          key=lambda x: x.offset)
+            if not over:
+                continue
+            # they fill it exactly (no note runs past it, no gap left): a rest given to the wrong voice
+            t, tiles = a0, True
+            for x in over:
+                if x.offset != t or x.offset + x.duration > a1:
+                    tiles = False
+                    break
+                t = x.offset + x.duration
+            if not (tiles and t == a1):
+                keep.append((a0, a1))
+        return keep
+
+    def take(layer, notes: bool, blocked=()) -> None:
         for raw in layer:
             if notes and raw.pitches:
                 ev = _pick(raw, which)
@@ -418,14 +457,19 @@ def _voice_from(primary, fallbacks, which: str, length: Fraction) -> list[Event]
                 ev = Event(raw.offset, raw.duration)
             else:
                 continue
+            if notes and _overlaps(raw.offset, raw.offset + raw.duration, list(blocked)):
+                continue
             if not _overlaps(raw.offset, raw.offset + raw.duration, spans):
                 events.append(ev)
                 spans.append((raw.offset, raw.offset + raw.duration))
 
     take(primary, True)
+    if rests_first:
+        take(primary, False)
     for layer in fallbacks:
-        take(layer, True)
-    take(primary, False)
+        take(layer, True, real_rest(layer))
+    if not rests_first:
+        take(primary, False)
     for layer in fallbacks:
         take(layer, False)
     events.sort(key=lambda e: e.offset)
@@ -480,18 +524,18 @@ def _order_layers(layers: list[list[RawEvent]]) -> list[list[RawEvent]]:
     return order
 
 
-def _split_staff(staff: Staff, n: int, length: Fraction) -> list[list[Event]]:
+def _split_staff(staff: Staff, n: int, length: Fraction, rests_first: bool = False) -> list[list[Event]]:
     """Split one staff into n (1 or 2) voices: upper takes top notes, lower bottom notes."""
     note_layers = _order_layers([l for l in staff.layers if any(e.pitches for e in l)])
     if not note_layers:
         # Only rests (e.g. a silent bar between verses): keep the visible ones.
         rests = max(staff.layers, key=lambda l: sum(e.duration for e in l if not e.hidden), default=[])
         return [_voice_from(rests, [], "top", length) for _ in range(n)]
-    upper = _voice_from(note_layers[0], note_layers[1:], "top", length)
+    upper = _voice_from(note_layers[0], note_layers[1:], "top", length, rests_first)
     if n == 1:
         voices = [upper]
     else:
-        voices = [upper, _voice_from(note_layers[-1], note_layers[-2::-1], "bottom", length)]
+        voices = [upper, _voice_from(note_layers[-1], note_layers[-2::-1], "bottom", length, rests_first)]
     for v in voices:
         for e in v:
             if not e.is_rest and e.offset in staff.lyrics:
@@ -514,6 +558,12 @@ def _assign(staves: list[Staff], upper_clefs: set | None = None) -> list[tuple[S
     if n == 2:
         return [(staves[0], 2, 0), (staves[1], 2, 2)]
     if n == 3:
+        two = lambda st: (sum(1 for l in st.layers if any(e.pitches for e in l)) >= 2
+                          or any(len(e.pitches) >= 2 for l in st.layers for e in l))
+        if CLEF_RANK[staves[1].clef] <= 1 and staves[2].clef == "F" and two(staves[1]) and not two(staves[0]):
+            # a soloist's staff over the choir's two («No volveré»: the 2nd staff holds two voices):
+            # the choir is the SATB; the solo line is not one of the four voices
+            return [(staves[1], 2, 0), (staves[2], 2, 2)]
         if CLEF_RANK[staves[1].clef] == 0:  # G G F -> S, A, TB
             return [(staves[0], 1, 0), (staves[1], 1, 1), (staves[2], 2, 2)]
         return [(staves[0], 2, 0), (staves[1], 1, 2), (staves[2], 1, 3)]
@@ -588,7 +638,10 @@ def _parse(path: Path):
     return converter.parse(str(path))
 
 
-def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None) -> ChoralScore:
+def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None, rests_first: bool = False,
+                       staves_per_system: int = 0) -> ChoralScore:
+    """staves_per_system: how many staves a system has, when another engine saw it (Audiveris):
+    an engine that read each 4-staff system as two 2-staff systems (homr) gets them joined again."""
     # music21 prints import warnings ("ties left open") to stderr; the rules report those properly.
     with contextlib.redirect_stderr(io.StringIO()):
         score = _parse(Path(xml_path))
@@ -639,7 +692,7 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
         systems.append({"rows": staff_rows, "layout": [layout[si]] if layout else [], "count": b - a})
 
     # 4. repair systems whose staves were detected as separate systems
-    target = max((len(s["rows"]) for s in systems), default=0)
+    target = max(max((len(s["rows"]) for s in systems), default=0), staves_per_system)
     page_w = max((st.right for s in (layout or []) for st in s.staves), default=1)
     merged = []
     for s in systems:
@@ -660,8 +713,10 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
 
     # 5. text attached as lyrics to a staff that has lyrics in only a few systems
     #    (a copyright line at the page bottom, a footnote...) is not lyrics: drop it.
+    _drop_copyright_lines(merged, issues)
     _drop_stray_lyrics(merged, issues)
     _words_for_solos(merged, issues)
+    _words_as_lyrics(merged, issues)
     for si, s in enumerate(merged, start=1):
         _renumber_verses(s, si, issues)
     _align_verse_numbers(merged, issues)
@@ -688,6 +743,12 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
                 m.bbox = _bbox(s["layout"], j)
                 m.geometry = _geometry(s["layout"], j, staves)
             assignment = _assign(staves, upper_clefs)
+            if assignment and len(staves) == 3 and len(assignment) == 2 and assignment[0][0] is staves[1] \
+                    and m.geometry and len(m.geometry.get("staves", [])) == 3:
+                # the soloist's staff is not one of the voices: the notehead check looks at the choir's
+                m.geometry["staves"] = m.geometry["staves"][1:]
+                if m.geometry.get("clefs"):
+                    m.geometry["clefs"] = m.geometry["clefs"][1:]
             if assignment is None:
                 if j == 0:
                     issues.append(Issue("estructura", "error",
@@ -696,7 +757,7 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
                 m.voices = {v: [Event(Fraction(0), m.bar_length, filled=True)] for v in VOICES}
             else:
                 for staff, k, first in assignment:
-                    for off, evs in enumerate(_split_staff(staff, k, m.bar_length)):
+                    for off, evs in enumerate(_split_staff(staff, k, m.bar_length, rests_first)):
                         m.voices[VOICES[first + off]] = evs
                 for v in VOICES:  # voices not printed in this system rest
                     m.voices.setdefault(v, [Event(Fraction(0), m.bar_length)])
@@ -706,6 +767,7 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None)
             measures.append(m)
 
     _time_from_content(measures, issues)
+    _ties_to_slurs(measures)
     _detect_pickup_and_number(measures)
     md = score.metadata
     title = _biggest_credit(score) or ((md.title or md.movementName) if md else None)
@@ -751,16 +813,46 @@ def _solo_syllables(text: str) -> list[tuple[str, str]]:
     return [(s.text, s.syllabic) for s in verse_syllables(text)]
 
 
+_DIRECTIONS = {"unis", "unís", "unisono", "unísono", "div", "divisi", "solo", "soli", "tutti", "coro", "rit", "ritard",
+               "ritardando", "rall", "a tempo", "accel", "cresc", "dim", "fine", "coda", "tenor", "tenores", "bajo",
+               "bajos", "soprano", "sopranos", "contralto", "contraltos", "barítono", "hum", "estrofa", "voces"}
+
+
+def _not_sung(text: str) -> bool:
+    """Text printed near a staff that is not lyrics: a performance marking («unis.», «div.»), a
+    subtitle in parentheses («(Prefixo 2008)») or anything with numbers (years, pages). A measure
+    number read in front of the words («40 Gran-de es Dios») does not count."""
+    t = re.sub(r"^\d+\s+", "", text.strip())
+    core = t.strip(".:;,¡!¿?()[] ").lower()
+    return (not core or core in _DIRECTIONS or (t.startswith("(") and t.endswith(")"))
+            or any(c.isdigit() for c in t))
+
+
+def _lyric_like(text: str) -> bool:
+    """A line of sung words: several words, split into syllables somewhere («An-ge les se reu-nen»)."""
+    words = text.split()
+    return len(words) >= 4 and "-" in text and not _not_sung(text) and ":" not in text
+
+
 def _words_for_solos(systems: list[dict], issues: list[Issue]) -> None:
     """In a solo system (one printed staff) the engine may read the words as plain text instead
-    of lyrics. Turn that text into syllables on the notes of the solo, in order."""
+    of lyrics. Turn that text into syllables on the notes of the solo, in order. Markings like
+    «unis.» or a subtitle are not words; and when the solo has no line of words of its own, the
+    engine may have stuck it to the first measure of the next system («Pronto vendrá»)."""
     for si, s in enumerate(systems, start=1):
         if len(s["rows"]) != 1:
             continue
         row = s["rows"][0]
         if any(st.lyrics for st in row):
             continue
-        text = " ".join(t for st in row for _, t in sorted(st.texts))
+        text = " ".join(t for st in row for _, t in sorted(st.texts) if not _not_sung(t))
+        if not _lyric_like(text) and si < len(systems):
+            nxt = [r[0] for r in systems[si]["rows"] if r]   # the first measure of each staff of the next system
+            found = [(st, item) for st in nxt for item in st.texts if _lyric_like(item[1])]
+            if found:
+                text = " ".join(item[1] for _, item in found)
+                for st, item in found:
+                    st.texts.remove(item)
         syllables = _solo_syllables(text)
         if not syllables:
             continue
@@ -776,6 +868,88 @@ def _words_for_solos(systems: list[dict], issues: list[Issue]) -> None:
         issues.append(Issue("estructura", "info",
                             f"Sistema {si}: la letra del solo venía como texto suelto; se repartió en sus notas "
                             f"({min(len(slots), len(syllables))} sílabas)."))
+
+
+def _words_as_lyrics(systems: list[dict], issues: list[Issue]) -> None:
+    """Stanzas the engine read as plain text («Anhelo amarte más»: printed without hyphens,
+    «An he loa mar te mas», Audiveris gave every line as text under the upper staff). In a system
+    with no lyrics at all, the lines of text under the upper staff are told apart by their height
+    (each height a stanza, the nearest one first) and their syllables go on the melody's notes, in
+    order. Only lyric-like text: several syllables on each line."""
+    for si, s in enumerate(systems, start=1):
+        if len(s["rows"]) < 2 or any(st.lyrics for row in s["rows"] for st in row):
+            continue
+        row = s["rows"][0]
+        items = [(j, off, text, y) for j, st in enumerate(row) for off, text, y in st.text_below
+                 if not _not_sung(text)]
+        if len(items) < 3:
+            continue
+        heights: list[float] = []
+        for y in sorted({y for *_, y in items}, reverse=True):   # nearest to the staff first
+            if not heights or heights[-1] - y > 8:
+                heights.append(y)
+        def line_of(y: float) -> int:
+            return 1 + min(range(len(heights)), key=lambda k: abs(heights[k] - y))
+        slots = []
+        for j, st in enumerate(row):
+            layers = _order_layers([l for l in st.layers if any(e.pitches for e in l)])
+            if layers:
+                slots += [(j, e.offset) for e in layers[0] if e.pitches and not e.slur_cont
+                          and not any(t in ("stop", "continue") for t in e.ties)]
+        slots.sort()
+        placed = 0
+        for n in range(1, len(heights) + 1):
+            pieces = sorted((j, off, text) for j, off, text, y in items if line_of(y) == n)
+            if sum(len(text.split()) for *_, text in pieces) < 4:
+                continue   # a line of a word or two is not a stanza
+            # each piece starts on the first note at or after the point it is printed (a piece the
+            # engine lost or put elsewhere does not shift the rest of the line)
+            cursor = 0
+            for j, off, text in pieces:
+                start = next((k for k, sl in enumerate(slots) if sl >= (j, off)), len(slots))
+                cursor = max(cursor, start)
+                for word in text.split():
+                    if cursor >= len(slots):
+                        break
+                    sj, soff = slots[cursor]
+                    row[sj].lyrics.setdefault(soff, {})[n] = (word, "single")
+                    placed += 1
+                    cursor += 1
+        if placed:
+            for st in row:
+                st.texts = [t for t in st.texts if _not_sung(t[1])]
+                st.text_below = []
+            issues.append(Issue("estructura", "info",
+                                f"Sistema {si}: la letra venía como texto suelto; se repartió en las notas de la melodía "
+                                f"({len(heights)} renglón(es), {placed} sílabas)."))
+
+
+_COPYRIGHT = re.compile(r"©|\(c\)|copy|right|reserv|derechos|todos los", re.IGNORECASE)
+
+
+def _drop_copyright_lines(systems: list[dict], issues: list[Issue]) -> None:
+    """The page footer read as a lyric line («Spanish translation © Copyright 1968 by Geo. P. Simmonds.
+    All Rights Reserved» on the notes of the last system): a line of a system with «©», «Copyright»,
+    «Rights Reserved» or «derechos reservados» in it is not sung."""
+    for si, s in enumerate(systems, start=1):
+        lines: dict[int, list[str]] = {}
+        for row in s["rows"]:
+            for st in row:
+                for d in st.lyrics.values():
+                    for n, (t, _) in d.items():
+                        lines.setdefault(n, []).append(t)
+        bad = [n for n, ts in lines.items() if _COPYRIGHT.search(" ".join(ts).replace("-", ""))]
+        if not bad:
+            continue
+        for row in s["rows"]:
+            for st in row:
+                for off in list(st.lyrics):
+                    for n in bad:
+                        st.lyrics[off].pop(n, None)
+                    if not st.lyrics[off]:
+                        del st.lyrics[off]
+        issues.append(Issue("estructura", "info",
+                            f"Sistema {si}: se descartó el aviso de derechos leído como letra (renglón {', '.join(map(str, bad))})."))
 
 
 def _drop_stray_lyrics(systems: list[dict], issues: list[Issue]) -> None:
@@ -811,6 +985,25 @@ def _drop_stray_lyrics(systems: list[dict], issues: list[Issue]) -> None:
                     st.lyrics = {}
                 issues.append(Issue("estructura", "info",
                                     f"Sistema {si}: se descartó texto que no parece letra: «{' '.join(words)[:80]}»."))
+
+
+def _ties_to_slurs(measures: list[Measure]) -> None:
+    """A tie can only join two notes of the same pitch. A voice «tied» to a different note got the
+    tie of the other note of a chord when the chord was split between the voices («Bendición por
+    los alimentos» c.4: do tied to do in the chord, the soprano takes the mi♭ above): the next
+    note is a new attack inside the same melisma (same syllable), as under a slur."""
+    for v in VOICES:
+        prev = None
+        for m in measures:
+            for e in m.voices.get(v, []):
+                if e.is_rest:
+                    prev = None
+                    continue
+                if prev is not None and prev.tie in ("start", "continue") and e.midi != prev.midi:
+                    prev.tie = "stop" if prev.tie == "continue" else None
+                    e.tie = "start" if e.tie == "continue" else (None if e.tie == "stop" else e.tie)
+                    e.slur_cont = True
+                prev = e
 
 
 def _time_from_content(measures: list[Measure], issues: list[Issue]) -> None:
@@ -953,11 +1146,17 @@ def _detect_pickup_and_number(measures: list[Measure]) -> None:
     if not measures:
         return
     first = measures[0]
-    longest = max((_content_end(v) for v in first.voices.values()), default=Fraction(0))
+    # a voice that only rests in a pickup has a whole-measure rest printed («Prefiero a mi Cristo»:
+    # a solo «Pre-» over the men's full-bar rest): its length is the measure's, not a full bar
+    singing = [v for v in first.voices.values() if any(not e.is_rest for e in v)]
+    longest = max((_content_end(v) for v in (singing or first.voices.values())), default=Fraction(0))
     if 0 < longest < first.bar_length:
         first.pickup = True
         first.duration = longest
         for name, evs in first.voices.items():  # trim the padding added by the splitter
+            if singing and evs and all(e.is_rest for e in evs):   # its whole-measure rest
+                first.voices[name] = [Event(Fraction(0), longest)]
+                continue
             first.voices[name] = [e for e in evs if e.offset < longest]
             if first.voices[name] and first.voices[name][-1].end > longest and first.voices[name][-1].filled:
                 first.voices[name][-1].duration = longest - first.voices[name][-1].offset

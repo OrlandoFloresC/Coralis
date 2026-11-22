@@ -41,7 +41,8 @@ class AudiverisEngine(Engine):
         result = EngineResult(engine=self.name, image=book, log=log)
         timeout = self.cfg["tools"]["engine_timeout"] * len(pages)
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  timeout=timeout, env=_quiet_env())
             log.write_text(proc.stdout + "\n" + proc.stderr, encoding="utf-8")
         except subprocess.TimeoutExpired:
             result.error = "tiempo agotado"
@@ -53,3 +54,16 @@ class AudiverisEngine(Engine):
         if not result.ok:
             result.error = f"Audiveris no exportó MusicXML (código {proc.returncode}); ver {log.name}"
         return result
+
+
+def _quiet_env() -> dict:
+    """On a Mac a Java program is an app: every run of Audiveris took the focus and jumped to the main
+    desktop (the user noticed it during a batch). As a background app with no window it does not."""
+    import os
+    import sys
+
+    env = dict(os.environ)
+    if sys.platform == "darwin":
+        extra = "-Dapple.awt.UIElement=true -Djava.awt.headless=true"
+        env["JAVA_TOOL_OPTIONS"] = (env.get("JAVA_TOOL_OPTIONS", "") + " " + extra).strip()
+    return env

@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .issues import Issue
 from .lyrics_fix import ELISION
-from .score import PARTNER, VOICES, ChoralScore, Event, lyric_voice
+from .score import PARTNER, VOICES, ChoralScore, Event, Measure, lyric_voice
 
 # --------------------------------------------------------------------------- Spanish syllables
 
@@ -229,32 +229,62 @@ def place_verse(slots: list[Event], ocr: list[str | None], syls: list[Syl],
     return list(reversed(out))
 
 
-def apply_lyrics_text(cs: ChoralScore, verses: list[list[Syl]]) -> list[Issue]:
-    # the words go on the soprano, or on the men where the women are silent
-    slots: list[Event] = [e for m in cs.measures for e in m.voices.get(lyric_voice(m), []) if e.takes_syllable]
-    owner = {id(e): m for m in cs.measures for e in m.voices.get(lyric_voice(m), [])}
-    issues: list[Issue] = []
+def lyric_slot_voices(cs: ChoralScore, held: bool = True) -> list[tuple[Event, Measure, str]]:
+    """The notes that can take the words, in order, with their measure and voice: the voice that
+    carries the words (the soprano, or the men where the women are silent) and, on a shared staff,
+    its partner's notes while it holds a note (the melody moving under a sustained top voice, or an
+    echo: «Hi-zo un ar-ca in-men-sa» under a held chord). The vote reads lyrics the same way."""
+    out: list[tuple[Event, Measure, str]] = []
+    for m in cs.measures:
+        lead = lyric_voice(m)
+        mine = m.voices.get(lead, [])
+        here = [(e, m, lead) for e in mine if e.takes_syllable]
+        if held and len(m.staves) < 4:
+            starts = {e.offset for e in mine if e.is_attack}
+            here += [(e, m, PARTNER[lead]) for e in m.voices.get(PARTNER[lead], [])
+                     if e.takes_syllable and e.offset not in starts
+                     and any(x.pitch and x.offset < e.offset < x.end for x in mine)]
+        out += sorted(here, key=lambda t: t[0].offset)
+    return out
+
+
+def _slot_plan(cs: ChoralScore, held: bool) -> dict:
+    found = lyric_slot_voices(cs, held)
+    slots = [e for e, _, _ in found]
+    owner = {id(e): m for e, m, _ in found}
+    voice_of = {id(e): v for e, _, v in found}
     # In a homophonic hymn the syllables fall where the voices move together: a soprano
     # note that no other voice attacks with is a melisma (the 2nd of two beamed eighths
     # over a held chord). Without other voices, every note may take a syllable.
-    others = [v for v in ("alto", "tenor", "bass")
-              if any(not e.is_rest for m in cs.measures for e in m.voices.get(v, []))]
+    active = [v for v in VOICES if any(not e.is_rest for m in cs.measures for e in m.voices.get(v, []))]
 
     def together(e: Event) -> bool:
-        m = owner[id(e)]
-        mine = lyric_voice(m)
-        return not others or any(x.offset == e.offset and x.is_attack
-                                 for v in others if v != mine for x in m.voices.get(v, []))
+        m, mine = owner[id(e)], voice_of[id(e)]
+        return len(active) < 2 or any(x.offset == e.offset and x.is_attack
+                                      for v in active if v != mine for x in m.voices.get(v, []))
 
-    sung = [together(e) for e in slots]
-    ocr_all = [{k: t for k, (t, _) in e.lyrics.items()} for e in slots]
+    return {"slots": slots, "owner": owner, "voice_of": voice_of, "sung": [together(e) for e in slots],
+            "ocr": [{k: t for k, (t, _) in e.lyrics.items()} for e in slots]}
+
+
+def apply_lyrics_text(cs: ChoralScore, verses: list[list[Syl]]) -> list[Issue]:
+    """Place each stanza on the notes of the voice that carries the words; only when it does not fit
+    there, also on the partner's notes while that voice holds (the melody moving under a sustained
+    top voice): in an ordinary hymn those are passing notes under a held syllable."""
+    issues: list[Issue] = []
+    plain = _slot_plan(cs, held=False)
+    wide = None
     for n, syls in enumerate(verses, start=1):
-        ocr = [d.get(n) for d in ocr_all]
-        placed = place_verse(slots, ocr, syls, sung)
+        plan = plain
+        placed = place_verse(plan["slots"], [d.get(n) for d in plan["ocr"]], syls, plan["sung"])
+        if not placed:
+            wide = wide or _slot_plan(cs, held=True)
+            plan = wide
+            placed = place_verse(plan["slots"], [d.get(n) for d in plan["ocr"]], syls, plan["sung"])
         if not placed:
             issues.append(Issue("letra", "error",
                                 f"La estrofa {n} del archivo de letra tiene {len(syls)} sílabas y solo hay "
-                                f"{len(slots)} notas para ponerlas; se dejó la letra leída por el OCR."))
+                                f"{len(plan['slots'])} notas para ponerlas; se dejó la letra leída por el OCR."))
             continue
         # replace this verse everywhere (soprano and the alto copies)
         for m in cs.measures:
@@ -262,10 +292,10 @@ def apply_lyrics_text(cs: ChoralScore, verses: list[list[Syl]]) -> list[Issue]:
                 for e in m.voices.get(v, []):
                     e.lyrics.pop(n, None)
         for j, text, syl in placed:
-            e = slots[j]
+            e = plan["slots"][j]
             e.lyrics[n] = (text, syl)
-            m = owner[id(e)]
-            for a in m.voices.get(PARTNER[lyric_voice(m)], []):
+            m = plan["owner"][id(e)]
+            for a in m.voices.get(PARTNER[plan["voice_of"][id(e)]], []):
                 if a.offset == e.offset and a.is_attack:
                     a.lyrics[n] = (text, syl)
         issues.append(Issue("letra", "info",

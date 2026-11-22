@@ -6,6 +6,21 @@ Lo nuevo de cada versión. La guía completa de uso está en [GUIA.md](https://g
 > dudosos para que los revises. Compara siempre el resultado con la partitura impresa: la decisión final la
 > tienes tú.
 
+## 0.11.0 — noviembre de 2026
+
+- **Coralis lee la letra por su cuenta** (en Mac, con el lector de texto del sistema) y la compara con la de
+  Audiveris: corrige sílabas mal leídas, recupera sinalefas que se perdían («que_en» salía «que») y, cuando Audiveris
+  pierde renglones enteros, pone la letra que leyó Coralis. Se dejan fuera las dinámicas y las indicaciones
+  («mp», «cresc.», «hombres en unísono»). Puede equivocarse igual: revisa la letra.
+- Mejor letra al leer muchas partituras distintas: renglones repetidos, pies de página con derechos de autor,
+  letra en partituras de 4 pentagramas, mayúsculas y letras mal leídas.
+- En Mac, la conversión ya no saca la ventana al escritorio principal a cada rato.
+- **Lista de himnos con filtros:** ★ Favoritos (toca la estrella), «Necesitan atención» (los que tienen más
+  compases por revisar) y un buscador por nombre. La lista ya muestra todos los himnos (antes solo los 30 últimos).
+- Muchas reglas nuevas tras revisar 110 partituras: anacrusas, cambios de compás y de armadura, silencios
+  impresos, unísonos escritos, la clave antigua de tenor de los himnarios de cuartetos, solista sobre el coro,
+  y menos compases marcados como dudosos sin motivo.
+
 ## 0.10.0 — noviembre de 2026
 
 - **🎓 Aprende** (botón arriba, en la pantalla de inicio), con tres apartados:

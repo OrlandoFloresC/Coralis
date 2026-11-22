@@ -291,3 +291,100 @@ def test_signatures_given_by_hand():
     assert ms[0].bar_length == 4 and ms[0].voices["soprano"][-1].filled          # filled up to the new length
     assert ms[1].key_fifths == 0 and ms[1].voices["soprano"][0].pitch == "B4"    # B♭ of F major → B♮ in C
     assert ms[2].key_fifths == -1 and ms[2].voices["soprano"][0].pitch == "B-4"  # "one": only that measure
+
+
+def test_ocr_capital_v_in_the_middle_of_a_sentence():
+    from fractions import Fraction as Fr
+    from pathlib import Path
+
+    from omr_coral.model.lyrics_fix import lower_ocr_capitals
+    from omr_coral.model.score import VOICES, ChoralScore, Event, Measure
+
+    def bar(i, sylls):
+        m = Measure(index=i, system=1, page=None, staves=[], time=(3, 4), bar_length=Fr(3), duration=Fr(3))
+        m.voices = {v: [] for v in VOICES}
+        for k, (t, s) in enumerate(sylls):
+            e = Event(Fr(k), Fr(1), "C4", 60)
+            e.lyrics = {1: (t, s)}
+            m.voices["soprano"].append(e)
+        return m
+
+    cs = ChoralScore(Path("x"), [bar(0, [("Ver", "begin"), ("tus", "single"), ("ma", "begin")]),
+                                 bar(1, [("ra", "middle"), ("Vi", "begin"), ("llas.", "end")]),
+                                 bar(2, [("Voy", "single"), ("a", "single"), ("Vi", "begin")])], [])
+    assert lower_ocr_capitals(cs) == 2
+    assert [e.lyrics[1][0] for m in cs.measures for e in m.voices["soprano"]] == \
+        ["Ver", "tus", "ma", "ra", "vi", "llas.", "Voy", "a", "vi"]   # a sentence starts after «llas.»
+
+
+def test_pages_are_joined_even_when_music21_cannot_renotate_them(tmp_path, monkeypatch):
+    # music21 breaks re-making ties on some homr output (KeyError of a voice): write as it is
+    from music21 import converter, stream
+
+    from omr_coral.model.merge import merge_pages
+
+    pages = []
+    for k in (1, 2):
+        sc = converter.parse("tinyNotation: 4/4 c4 d e f")
+        pages.append(tmp_path / f"page_{k}.musicxml")
+        sc.write("musicxml", fp=str(pages[-1]))
+    real = stream.Score.write
+
+    def fussy(self, fmt=None, fp=None, **kw):
+        if kw.get("makeNotation", True):
+            raise KeyError("7")
+        return real(self, fmt, fp=fp, **kw)
+
+    monkeypatch.setattr(stream.Score, "write", fussy)
+    out, warnings = merge_pages(pages, tmp_path / "book")
+    assert out.exists() and warnings
+
+
+def test_ocr_glued_word_end_and_next_word_start():
+    from fractions import Fraction as Fr
+
+    from omr_coral.model.lyrics_fix import split_glued_syllables
+    from omr_coral.model.score import ChoralScore, Event, Measure
+
+    a, b = Event(Fr(0), Fr(1), "C4", 60), Event(Fr(1), Fr(1), "D4", 62)
+    a.lyrics = {1: ("ñor,mar", "middle")}
+    m = Measure(index=0, system=1, page=None, staves=[])
+    m.voices = {"soprano": [a, b]}
+    split_glued_syllables(ChoralScore(Path("x"), [m], []))
+    assert a.lyrics[1] == ("ñor,", "end") and b.lyrics[1] == ("mar", "begin")
+
+
+def test_a_tie_to_another_pitch_is_a_slur():
+    from fractions import Fraction as Fr
+
+    from omr_coral.model.score import Event, Measure, _ties_to_slurs
+
+    a, b = Event(Fr(0), Fr(1), "C4", 60, tie="start"), Event(Fr(1), Fr(1), "E-4", 63, tie="stop")
+    m = Measure(index=0, system=1, page=None, staves=[])
+    m.voices = {"soprano": [a, b]}
+    _ties_to_slurs([m])
+    assert a.tie is None and b.tie is None and b.slur_cont and b.is_attack and not b.takes_syllable
+
+
+def test_pickup_over_a_whole_measure_rest():
+    from fractions import Fraction as Fr
+
+    from omr_coral.model.score import Event, Measure, _detect_pickup_and_number
+
+    m = Measure(index=0, system=1, page=None, staves=[], time=(3, 4), bar_length=Fr(3), duration=Fr(3))
+    m.voices = {"soprano": [Event(Fr(0), Fr(1), "D4", 62), Event(Fr(1), Fr(2), filled=True)],
+                "bass": [Event(Fr(0), Fr(3))]}   # the men's printed whole-measure rest
+    _detect_pickup_and_number([m])
+    assert m.pickup and m.duration == 1 and m.voices["bass"][0].duration == 1
+
+
+def test_quotation_marks_are_lyrics():
+    from omr_coral.rules.lyrics import _suspicious_syllable
+
+    assert not _suspicious_syllable('"Tú') and not _suspicious_syllable('no"') and _suspicious_syllable('a"b')
+
+
+def test_ocr_digits_inside_words():
+    from omr_coral.model.lyrics_fix import fix_ocr_letters
+
+    assert [fix_ocr_letters(x) for x in ("na-c10", "v1", "ta1", "tẹ", "40")] == ["na-cio", "vi", "tal", "te", "40"]

@@ -69,6 +69,36 @@ def _content(events: list[Event]) -> tuple:
     return tuple((e.offset, e.pitch, e.duration, e.tie) for e in events if not e.filled)
 
 
+def _engine_settles(best: dict, groups: dict, engines_of: dict) -> bool:
+    """(Nearly) every reading of one engine (at least 3 readings, ¾ of them) chose this version,
+    it breaks no rule, and the
+    other engine's readings do not agree among themselves (none of its versions has more than
+    half of them): one engine sure, the other guessing."""
+    if best["errors"] or best["avisos"]:
+        return False
+    eng = {s.split("/")[0] for s in best["sources"]}
+    if len(eng) != 1:
+        return False
+    (e,) = eng
+    if engines_of.get(e, 0) < 3 or sum(1 for s in best["sources"] if s.startswith(e + "/")) < 0.75 * engines_of[e]:
+        return False
+    for other, n in engines_of.items():
+        if other == e or not n:
+            continue
+        top = max((sum(1 for s in g["sources"] if s.startswith(other + "/")) for g in groups.values()), default=0)
+        if top > n / 2:
+            return False
+    return True
+
+
+def _untied(key: tuple) -> tuple:
+    return tuple((o, p, d) for o, p, d, _ in key)
+
+
+def key_of(group: dict, groups: dict) -> tuple:
+    return next(k for k, g in groups.items() if g is group)
+
+
 def _voice_issues(c: Candidate, mi: int, v: str) -> tuple[int, int]:
     errs = avs = 0
     for i in c.issues:
@@ -92,7 +122,8 @@ def _lyric_lines(c: Candidate, mi: int) -> dict[int, list[tuple]]:
                 out[n].append((e.offset, text, syl))
     # the staff partner's syllables while the lead voice holds a note («El camino es escabroso»:
     # the soprano holds while the alto echoes «(muy can-sa-dos)»)
-    for e in mm.voices.get(PARTNER[lead], []):
+    shared = len(mm.staves) < 4   # one staff per voice («Yo pensaba que el hombre»): each sings its own words
+    for e in (mm.voices.get(PARTNER[lead], []) if shared else []):
         if not e.is_attack or not holding(mm.voices.get(lead, []), e.offset):
             continue
         for n, (text, syl) in e.lyrics.items():
@@ -148,6 +179,9 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
     issues: list[Issue] = [i for i in ref.score.issues if i.severity == "info"]
     details = {"reference": ref.label, "readings": [c.label for c in cands], "measures": []}
 
+    engines_of: dict[str, int] = defaultdict(int)   # how many readings each engine gave
+    for c in cands:
+        engines_of[c.engine] += 1
     sig_tallies: list[dict] = []
     for k, m in enumerate(voted.measures):
         aligned = [(c, maps[id(c)][k]) for c in cands if k in maps[id(c)]]
@@ -161,7 +195,7 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
                 key = _content(evs)
                 errs, avs = _voice_issues(c, j, v)
                 g = groups.setdefault(key, {"events": evs, "weight": 0.0, "errors": errs, "avisos": avs,
-                                            "sources": []})
+                                            "sources": [], "key": c.score.measures[j].key_fifths})
                 g["weight"] += c.weight
                 g["errors"] = min(g["errors"], errs)
                 g["avisos"] = min(g["avisos"], avs)
@@ -179,8 +213,15 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
             for e in new_events:
                 e.lyrics = {}
             m.voices[v] = new_events
+            # agreement on the notes: versions that differ only in a tie («Puertas abiertas» c.28:
+            # 4 homr readings tie the last note, 3 Audiveris readings do not) agree on what is sung
+            untied = _untied(key_of(best, groups))
+            notes_weight = sum(g["weight"] for key, g in groups.items() if _untied(key) == untied)
+            # one engine unanimous, the other split («Puertas abiertas» c.24, 29, 32: all of homr's
+            # readings see a small eighth rest that each Audiveris reading misses in its own way)
+            settled = _engine_settles(best, groups, engines_of)
             m.votes[v] = {"weight": best["weight"], "total": total, "versions": len(groups),
-                          "sources": best["sources"]}
+                          "sources": best["sources"], "notes_weight": notes_weight, "settled": settled}
             m_detail["voices"][v] = {"agreement": round(best["weight"] / total, 3), "versions": len(groups),
                                      "sources": best["sources"]}
 
@@ -268,7 +309,8 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
             m.geometry, m.geometry_dir = c.score.measures[j].geometry, c.image_dir
 
         # ---- agreement
-        weak = {v: d for v, d in m.votes.items() if d["weight"] / total < min_agree}
+        weak = {v: d for v, d in m.votes.items()
+                if d.get("notes_weight", d["weight"]) / total < min_agree and not d.get("settled")}
         if weak:
             detail = ", ".join(f"{_VOICE_ES[v]} {d['weight']:g}/{total:g}" for v, d in weak.items())
             issues.append(Issue("votacion", "aviso",
@@ -277,6 +319,7 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
         details["measures"].append(m_detail)
 
     _resolve_signatures(voted, sig_tallies)
+    _respell_to_voted_key(voted, sig_tallies)
     _fit_bars(voted, issues)
     _fix_endings(voted)
     _layout_fallback(voted, cands)
@@ -306,13 +349,20 @@ def _fit_bars(voted: ChoralScore, issues: list[Issue]) -> None:
                 if e.filled and e.end > m.bar_length:
                     e.duration = m.bar_length - e.offset
             m.voices[v] = kept
+    # quarter-note times too (2/4 bars inside a 4/4: «A Dios sea la gloria» c.40), but only to a
+    # time printed elsewhere in the piece: all voices missing a rest at a phrase end is no new time
+    printed_quarter = {mm.time for mm in ms if mm.time[1] == 4}
     for k, m in enumerate(ms):
-        if k in (0, len(ms) - 1) or m.pickup or m.time[1] != 8:
+        if k in (0, len(ms) - 1) or m.pickup or m.time[1] not in (4, 8):
             continue
         singing = {v: evs for v, evs in m.voices.items() if any(not e.is_rest for e in evs)}
         if len(singing) < 2:
             continue
-        unit = Fraction(1, 2)  # an eighth, in quarter notes
+        unit = Fraction(1, 2) if m.time[1] == 8 else Fraction(1)   # an eighth / a quarter
+        if m.time[1] == 4:
+            fits0 = {_sung_end(evs) for evs in singing.values()}
+            if len(fits0) != 1 or (int(min(fits0)), 4) not in printed_quarter:
+                continue
         fits = sorted({_sung_end(evs) for evs in singing.values()})
         length = fits[0]
         if not (0 < length < m.bar_length) or length % unit:
@@ -348,10 +398,10 @@ def _fit_bars(voted: ChoralScore, issues: list[Issue]) -> None:
         neighbours = [_sung_end_all(ms[j]) for j in (k - 1, k + 1)]
         if any(n < ms[j].bar_length and n + length == m.bar_length for n, j in zip(neighbours, (k - 1, k + 1))):
             continue  # one half of a measure cut by a system break
-        new = (int(length / unit), 8)
+        new = (int(length / unit), m.time[1])
         issues.append(Issue("estructura", "info",
-                            f"Compás de {new[0]}/8 (las voces llenan {new[0]} corcheas) leído como "
-                            f"{m.time[0]}/{m.time[1]}.", m.index))
+                            f"Compás de {new[0]}/{new[1]} (las voces llenan {new[0]} "
+                            f"{'corcheas' if new[1] == 8 else 'negras'}) leído como {m.time[0]}/{m.time[1]}.", m.index))
         m.time, m.bar_length, m.duration = new, length, length
         for st in m.staves:
             st.time = new
@@ -449,6 +499,52 @@ def _signature_tally(aligned: list[tuple], whole_book_engines: set) -> dict:
     return out
 
 
+def _respell_to_voted_key(voted: ChoralScore, tallies: list[dict]) -> None:
+    """A voice chosen from a reading that did not see a key change has its notes in the old key
+    («Si alguien te pregunta» c.40: 3 sharps → 6 flats; the voted soprano sang sol♯ for sol♭).
+    The notes that followed the reading's key signature take the voted one; a note with its own
+    accidental keeps it."""
+    from music21 import key as m21key, pitch as m21pitch
+
+    from ..model.corrections import _set_pitch
+
+    def alter(ks, step):
+        acc = ks.accidentalByStep(step)
+        return float(acc.alter) if acc is not None else 0.0
+
+    for m in voted.measures:
+        for v, alts in m.alternatives.items():
+            chosen = next((g for g in alts if g.get("chosen")), None)
+            src = chosen.get("key") if chosen else None
+            if src is None or src == m.key_fifths:
+                continue
+            # only when the voted key is clear: twice the weight of the reading's key and most of
+            # all («Es exaltado» c.31: the vote got the key wrong; respelling broke right notes)
+            def clear(k, value, other):
+                t = tallies[k]["key_fifths"] if 0 <= k < len(tallies) else {}
+                total = sum(t.values())
+                return bool(total) and t.get(value, 0) >= 2 * t.get(other, 0) and t.get(value, 0) >= 0.6 * total
+
+            k = m.index
+            t = tallies[k]["key_fifths"] if k < len(tallies) else {}
+            nxt = voted.measures[k + 1] if k + 1 < len(voted.measures) else None
+            # or a tie on the first measure of a change that the next measure confirms (one engine
+            # saw the new key a measure late: «Si alguien te pregunta» c.40)
+            late = (t.get(m.key_fifths, 0) >= t.get(src, 0) and nxt is not None
+                    and nxt.key_fifths == m.key_fifths and clear(k + 1, m.key_fifths, src))
+            if not (clear(k, m.key_fifths, src) or late):
+                continue
+            old, new = m21key.KeySignature(src), m21key.KeySignature(m.key_fifths)
+            for e in m.voices.get(v, []):
+                if e.pitch is None:
+                    continue
+                p = m21pitch.Pitch(e.pitch)
+                if (float(p.accidental.alter) if p.accidental else 0.0) == alter(old, p.step):
+                    a = alter(new, p.step)
+                    p.accidental = m21pitch.Accidental(a) if a else None
+                    _set_pitch(e, p)
+
+
 def _resolve_signatures(voted: ChoralScore, tallies: list[dict]) -> None:
     """Time and key signature by majority, measure by measure.
 
@@ -479,7 +575,23 @@ def _resolve_signatures(voted: ChoralScore, tallies: list[dict]) -> None:
                 order = (after, before) if attr == "key_fifths" else (before, after)
                 value = next((x for x in order if x in options), getattr(m, attr))
             if attr == "time" and Fraction(4 * value[0], value[1]) != m.bar_length:
-                continue  # a different bar length would not fit the voted notes
+                # a different bar length must fit the voted notes: it does when every voice that
+                # sings ends right there and only gap-filling rests come after (a 2/4 bar read by
+                # Audiveris in a reference that kept 4/4: «A Dios sea la gloria» c.40)
+                new_len = Fraction(4 * value[0], value[1])
+                singing = [evs for evs in m.voices.values() if any(not e.is_rest for e in evs)]
+                if m.pickup or not singing or any(_sung_end(evs) != new_len for evs in singing) or any(
+                        not e.filled and e.end > new_len for evs in m.voices.values() for e in evs):
+                    continue
+                m.bar_length = m.duration = new_len
+                for v, evs in m.voices.items():
+                    kept = [e for e in evs if e.offset < new_len]
+                    for e in kept:
+                        if e.end > new_len:
+                            e.duration = new_len - e.offset
+                    m.voices[v] = kept or [Event(Fraction(0), new_len, filled=True)]
+                for st in m.staves:
+                    st.time = value
             setattr(m, attr, value)
             if attr == "key_fifths":
                 for st in m.staves:  # the staves of the reference may disagree among themselves
@@ -512,6 +624,12 @@ def _drop_phantoms(voted: ChoralScore, cands: list[Candidate], maps: dict, marks
     old_index = {id(m): m.index for m in voted.measures}
     for i, m in enumerate(keep_m):
         m.index = i
+    if keep_m and not keep_m[0].pickup and keep_m[0] is not voted.measures[0]:
+        # the measure now first was a pickup that the reference reading (homr, with a silent
+        # measure of its own before it) took for a full measure («Grato es contar la historia»)
+        from ..model.score import _detect_pickup_and_number
+
+        _detect_pickup_and_number(keep_m)
     first_pickup = bool(keep_m) and keep_m[0].pickup
     for m in keep_m:
         m.number = m.index if first_pickup else m.index + 1

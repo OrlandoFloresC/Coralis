@@ -39,14 +39,16 @@ voices:
   ranges:
     soprano: [C4, A5]
     alto:    [F3, D5]
-    tenor:   [A2, G4]   # tenor/barítono
-    bass:    [E2, D4]
+    tenor:   [F2, G4]   # tenor/barítono (en cuartetos de hombres el barítono baja a fa2)
+    bass:    [C2, D4]   # los bajos de cuarteto llegan a do2
 
 rules:
   # Reglas activas: duracion, rango, coherencia, alteraciones, letra, unisono, melodia
   enabled: [duracion, rango, coherencia, alteraciones, letra, unisono, melodia]
   # Una nota fuera de rango por estos semitonos o más es "error"; por menos, "aviso".
   range_error_semitones: 5
+  # Hasta estos semitonos fuera del rango no se avisa (música escrita así, no un error de lectura).
+  range_margin_semitones: 2
   # Compases alrededor para decidir qué estrofas se cantan en un pasaje.
   lyrics_window: 2
   # Saltos mayores que esto (salvo la octava) se marcan como improbables. 9 = sexta mayor.
@@ -71,6 +73,9 @@ synthesis:
   # Con esta coincidencia o más, la imagen confirma la versión elegida aunque las lecturas
   # no se pusieran de acuerdo.
   confirm: 0.95
+  # Solo (sin otro aviso de notas) el aviso de síntesis no marca el compás como dudoso, salvo la huella
+  # de una nota corrida (falta una cabeza esperada Y sobra una impresa, coincidencia < 75 %).
+  alone_is_doubtful: false
   # Mejora mínima de coincidencia para cambiar una voz por otra versión.
   min_gain: 0.05
   max_passes: 5

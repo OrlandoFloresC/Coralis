@@ -14,11 +14,15 @@ from .ranges import _es
 
 
 def _sounding(score: ChoralScore, v: str):
-    """(measure_index, event) for every note of the voice, in order."""
+    """(measure_index, event, after_rest) for every note of the voice, in order."""
+    rested = False
     for m in score.measures:
         for e in m.voices.get(v, []):
-            if not e.is_rest:
-                yield m.index, e
+            if e.is_rest:
+                rested = True
+                continue
+            yield m.index, e, rested
+            rested = False
 
 
 def check(score: ChoralScore, cfg: dict) -> list[Issue]:
@@ -26,11 +30,16 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
     issues = []
     for v in VOICES:
         prev = None
-        for mi, e in _sounding(score, v):
+        for mi, e, after_rest in _sounding(score, v):
             if prev is not None:
                 pmi, p = prev
                 leap = abs(e.midi - p.midi)
-                if leap > max_leap and leap != 12:
+                # after a rest a new phrase may start anywhere: in the 9 hand-made hymns all 12 such
+                # leaps were right (between joined notes 1 of 14 was a misread)
+                # a bass line leaps sevenths (sol2 → fa♯3) as a matter of course: in the 9 hand-made
+                # hymns its 6 such leaps were all right; only past the octave it is suspicious
+                limit = 12 if v == "bass" else max_leap
+                if leap > limit and leap != 12 and not after_rest:
                     issues.append(Issue("melodia", "aviso",
                                         f"{VOICE_ES[v].capitalize()}: salto de {leap} semitonos "
                                         f"({_es(p.pitch)} → {_es(e.pitch)}), muy raro en un himno.", mi, v))

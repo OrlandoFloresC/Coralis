@@ -54,5 +54,12 @@ def merge_pages(files: list[Path], out: Path) -> tuple[Path, list[str]]:
     scores = [load_score(f) for f in files]
     merged, warnings = _concat(scores)
     out.parent.mkdir(parents=True, exist_ok=True)
-    merged.write("musicxml", fp=str(out))
+    try:
+        merged.write("musicxml", fp=str(out))
+    except (KeyError, IndexError, AttributeError) as e:
+        # music21 re-makes the notation on writing and breaks on some engine output (a note of
+        # voice 7 running past the bar into a measure without voice 7: KeyError '7'). The pages
+        # are already notated: write them as they are.
+        merged.write("musicxml", fp=str(out), makeNotation=False)
+        warnings.append(f"Las páginas se unieron sin rehacer la notación ({type(e).__name__}).")
     return out, warnings

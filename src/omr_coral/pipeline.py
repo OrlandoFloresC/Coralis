@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from fractions import Fraction
 import shutil
 import time
@@ -18,7 +19,7 @@ from .engines import get_engine
 from .model.digital import to_two_staves
 from .model.export import to_music21
 from .model.layout import read_audiveris_layout
-from .model.lyrics_fix import fix_ocr_lyrics, merge_elisions, split_glued_syllables
+from .model.lyrics_fix import fix_ocr_lyrics, merge_elisions, split_glued_syllables, lower_ocr_capitals
 from .model.lyrics_text import apply_lyrics_text, read_lyrics_file
 from .model.structure import apply_signatures, apply_structure
 from .model.verses import expand_verses, merge_split_measures
@@ -41,7 +42,8 @@ TITLE_FILE = "titulo.txt"  # name chosen by the user (overrides the title read f
 
 
 def _safe_name(name: str) -> str:
-    return "".join(c for c in name if c not in '<>:"/\\|?*').strip() or "resultado"
+    # a title ending in a period («Vive.») would give «Vive..musicxml»; Windows drops trailing dots too
+    return "".join(c for c in name if c not in '<>:"/\\|?*').strip().rstrip(". ") or "resultado"
 
 
 # --------------------------------------------------------------------------- recognition
@@ -99,7 +101,10 @@ def recognize(src: Path, cfg: dict, runs_dir: Path, lyrics_path: str | None = No
         out_dir = run_dir / "engines" / engine_name / variant
         res = get_engine(engine_name, cfg).recognize(variants[variant], out_dir)
         if res.musicxml:
-            merge_pages(res.musicxml, out_dir / RESULT_STEM)
+            try:
+                merge_pages(res.musicxml, out_dir / RESULT_STEM)
+            except Exception as e:  # noqa: BLE001  (one reading that cannot be joined must not stop the rest)
+                res.ok, res.error = False, f"no se pudieron unir las páginas: {e!r}"[:300]
         return job, res
 
     with ThreadPoolExecutor(max_workers=max(1, int(cfg["tools"].get("parallel_jobs", 2)))) as pool:
@@ -137,6 +142,11 @@ def _spanish_lyrics(cfg: dict) -> bool:
 def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
     weights = cfg.get("voting", {}).get("weights", {})
     cands = []
+    # how many staves a system has, as Audiveris saw it (homr sometimes reads a 4-staff open score
+    # as pairs of 2-staff systems: «Paz es la voz»)
+    seen = [len(st.staves) for d in (run_dir / "engines" / "audiveris").glob("*")
+            if (d / "book.omr").exists() for st in (_safe_layout(d / "book.omr") or [])]
+    staves = max(set(seen), key=seen.count) if seen else 0
     for engine_dir in sorted((run_dir / "engines").glob("*")):
         for vdir in sorted(engine_dir.glob("*")):
             xml = _reading_file(vdir)
@@ -145,10 +155,11 @@ def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
             omr = vdir / "book.omr"
             layout = read_audiveris_layout(omr) if omr.exists() else None
             try:
-                cs = build_choral_score(xml, layout)
+                cs = build_choral_score(xml, layout, staves_per_system=0 if layout else staves)
                 fix_ocr_lyrics(cs, spanish=_spanish_lyrics(cfg))
                 if _spanish_lyrics(cfg):
                     split_glued_syllables(cs)
+                    lower_ocr_capitals(cs)
             except Exception as e:  # noqa: BLE001  (a broken reading must not stop the vote)
                 print(f"  Lectura {engine_dir.name}/{vdir.name} descartada: {e}")
                 continue
@@ -157,34 +168,42 @@ def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
                 image_dir = run_dir / "pages"
             cands.append(Candidate(engine_dir.name, vdir.name, cs, image_dir,
                                    float(weights.get(engine_dir.name, 1.0))))
+    _old_tenor_clef(cands)
     _octave_treble_clef(cands, set(cfg.get("voting", {}).get("marks_engines", ["audiveris"])))
-    return cands
+    return _drop_broken_systems(cands, staves)
 
 
-def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
-    """Men's quartets print the upper staff in a treble clef with a small 8 below (an octave
-    lower). homr never sees the 8 and Audiveris misses it on some systems; a piece does not
-    change that clef from one system to the next. When most of the upper staves Audiveris read
-    have it, every upper staff read as a plain treble clef goes down an octave."""
-    def upper_staff(m):
-        if len(m.staves) == 2 or (len(m.staves) == 1 and m.solo == "upper"):
-            return m.staves[0]
-        return None
+def _old_tenor_clef(cands: list[Candidate]) -> None:
+    """Men's quartet hymnals (Simmonds, «Para cuartetos varoniles») print the upper staff in an old
+    tenor clef (two short bars) that no engine knows: each reading takes it for a G, F or C clef
+    («El mundo no es mi hogar»). In an ordinary hymn every reading agrees on the upper clef; when
+    some readings see G and others F or C over an F-clef lower staff, it is that clef: a treble
+    clef an octave down. The readings that saw G get the octave (as G8vb); the upper voices of the
+    others are wrong by a sixth or so and are ruled out of the vote (their words still count)."""
+    def upper(m):
+        return m.staves[0] if len(m.staves) == 2 and m.staves[1].clef == "F" else None
 
-    seen = [st.clef for c in cands if c.engine in clef_engines for m in c.score.measures
-            if (st := upper_staff(m)) is not None and st.clef in ("G", "G8vb")]
-    if not seen or seen.count("G8vb") <= len(seen) / 2:
+    per_cand = []
+    for c in cands:
+        clefs = [st.clef for m in c.score.measures for st in [upper(m)] if st is not None]
+        if clefs:
+            per_cand.append((c, max(set(clefs), key=clefs.count)))
+    seen = {clef for _, clef in per_cand}
+    g_like = [c for c, clef in per_cand if clef in ("G", "G8vb")]
+    odd = [c for c, clef in per_cand if clef in ("F", "C")]
+    if not (g_like and odd and len(g_like) >= 2 and seen <= {"G", "G8vb", "F", "C"}):
         return
     from music21 import pitch as m21pitch
 
-    for c in cands:
+    for c in cands:   # any upper staff read as a plain G, in any reading
         for m in c.score.measures:
-            st = upper_staff(m)
+            st = upper(m)
             if st is None or st.clef != "G":
                 continue
             st.clef = "G8vb"
-            if m.geometry and m.geometry.get("clefs") and m.geometry["clefs"][0] == "G":
-                m.geometry["clefs"][0] = "G8vb"  # where analysis by synthesis expects the heads
+            clefs = (m.geometry or {}).get("clefs")
+            if clefs and clefs[0] == "G":
+                clefs[0] = "G8vb"
             for v in ("soprano", "alto"):
                 for e in m.voices.get(v, []):
                     if e.pitch:
@@ -193,6 +212,77 @@ def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
                         e.pitch = p.nameWithOctave
                         if e.midi is not None:
                             e.midi -= 12
+    for c in cands:   # measure by measure: a reading may see G on one system and F on the next
+        for j, m in enumerate(c.score.measures):
+            st = upper(m)
+            if st is not None and st.clef in ("F", "C"):
+                for v in ("soprano", "alto"):
+                    c.issues.append(Issue("rango", "error", "Clave antigua de tenor leída como otra clave.", j, v))
+
+
+def _drop_broken_systems(cands: list[Candidate], staves: int) -> list[Candidate]:
+    """An open score (a staff per voice, as Audiveris saw it) that homr cut into loose 1- and
+    2-staff systems («Paz es la voz»: 118-126 measures where there are 71, voices crossed): those
+    readings would vote wrong voices, so they are left out when Audiveris' readings agree."""
+    if staves < 4:
+        return cands
+    counts = sorted(len(c.score.measures) for c in cands if c.engine == "audiveris")
+    if len(counts) < 2:
+        return cands
+    ref = counts[len(counts) // 2]
+    keep = [c for c in cands if c.engine == "audiveris" or len(c.score.measures) <= 1.25 * ref]
+    for c in cands:
+        if c not in keep:
+            print(f"  Lectura {c.engine}/{c.variant} descartada: partió los sistemas de {staves} pentagramas "
+                  f"({len(c.score.measures)} compases donde Audiveris ve {ref}).")
+    return keep
+
+
+def _safe_layout(omr: Path):
+    try:
+        return read_audiveris_layout(omr)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
+    """Men's quartets print the upper staff in a treble clef with a small 8 below (an octave
+    lower). homr never sees the 8 and Audiveris misses it on some systems; a piece does not
+    change that clef from one system to the next. When most of the upper staves Audiveris read
+    have it, every upper staff read as a plain treble clef goes down an octave."""
+    def upper_staves(m):
+        """The staves of the upper voices with the voices each one carries: one staff for both
+        (a hymnal's two staves, or an upper solo), or one staff per voice (an open score of four
+        staves: «Venid a mí los tristes»)."""
+        if len(m.staves) == 2 or (len(m.staves) == 1 and m.solo == "upper"):
+            return [(0, m.staves[0], ("soprano", "alto"))]
+        if len(m.staves) == 4:
+            return [(0, m.staves[0], ("soprano",)), (1, m.staves[1], ("alto",))]
+        return []
+
+    seen = [st.clef for c in cands if c.engine in clef_engines for m in c.score.measures
+            for _, st, _ in upper_staves(m) if st.clef in ("G", "G8vb")]
+    if not seen or seen.count("G8vb") <= len(seen) / 2:
+        return
+    from music21 import pitch as m21pitch
+
+    for c in cands:
+        for m in c.score.measures:
+            for k, st, voices in upper_staves(m):
+                if st.clef != "G":
+                    continue
+                st.clef = "G8vb"
+                clefs = (m.geometry or {}).get("clefs")
+                if clefs and len(clefs) > k and clefs[k] == "G":
+                    clefs[k] = "G8vb"  # where analysis by synthesis expects the heads
+                for v in voices:
+                    for e in m.voices.get(v, []):
+                        if e.pitch:
+                            p = m21pitch.Pitch(e.pitch)
+                            p.octave -= 1
+                            e.pitch = p.nameWithOctave
+                            if e.midi is not None:
+                                e.midi -= 12
 
 
 # --------------------------------------------------------------------------- validation
@@ -366,8 +456,62 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
                                  f"La línea de letra {n} repite la línea 1 (letra de otras voces en el coro): "
                                  "no se cuenta como estrofa."))
     lyrics_file = run_dir / LYRICS_FILE
+    own = None
+    if not lyrics_file.exists() and cfg.get("recognition", {}).get("own_lyrics_ocr", True):
+        from .model.lyrics_text import verse_syllables
+        from .ocr.lyrics_ocr import (audiveris_stanzas, complete, correct, coverage, drop_verses, lyric_slots,
+                                      rows_for, skipped_words, stanzas)
+
+        # Coralis' own reading of the lyrics lines, matched with the stanzas the vote found
+        rows = rows_for(run_dir)
+        theirs = audiveris_stanzas(voted)
+        found = stanzas(rows, theirs) if rows else None
+        slots = lyric_slots(voted)
+        if found:
+            noise = {n for n, t in enumerate(found, start=1) if t is None}
+            if noise:   # a «stanza» that was only a speck read by Audiveris
+                drop_verses(voted, noise)
+                vote_issues.append(Issue("letra", "info", f"Se quitó {len(noise)} renglón(es) de letra que "
+                                                          "Audiveris leyó de una mancha (casi sin texto)."))
+                theirs = audiveris_stanzas(voted)
+                found = [t for t in found if t is not None]
+            own = [complete(verse_syllables(t), th) for t, th in zip(found, theirs)]
     if lyrics_file.exists():
         vote_issues += apply_lyrics_text(voted, read_lyrics_file(lyrics_file))
+    elif own and (len(own) >= 2 or min(coverage(o, th) for o, th in zip(own, theirs)) < 0.8):
+        # stanzas stacked under the same notes (clean lines), or Audiveris lost much of the words:
+        # Coralis' text is placed whole (as if the user gave a .txt). In a long through-composed
+        # piece Audiveris read well, placing it all again only risks shifting it (see correct).
+        # a stanza where Coralis read clearly fewer syllables than Audiveris skipped words («Sublime
+        # gracia» lost «per-di-do fui, mi Dios me ha-lló»): it keeps Audiveris' words, mended
+        short = skipped_words(own, theirs)
+        kept = {v: [(t, syl, e) for t, syl, e in theirs[v - 1]] for v in short}
+        placed = apply_lyrics_text(voted, own)
+        for v in short:
+            for m in voted.measures:
+                for evs in m.voices.values():
+                    for e in evs:
+                        e.lyrics.pop(v, None)
+            for t, syl, e in kept[v]:
+                e.lyrics[v] = (t, syl)
+        # a stanza that does not fit on the notes (other voices' words read on the same line…): its
+        # Audiveris words stay, with the misread syllables mended
+        failed = {int(m.group(1)) for i in placed if i.severity == "error"
+                  for m in [re.match(r"La estrofa (\d+) del archivo", i.message)] if m} | short
+        vote_issues += [i for i in placed if not (i.severity == "error" and i.message.startswith("La estrofa "))]
+        mended = sum(correct(own[v - 1], theirs[v - 1], v, slots) for v in sorted(failed))
+        vote_issues += merge_elisions(voted) if failed else []
+        vote_issues.append(Issue("letra", "info", f"Letra leída por Coralis en la imagen ({len(own)} estrofa(s)), "
+                                                  "colocada guiándose por lo que leyó Audiveris."
+                                 + (f" La estrofa {', '.join(map(str, sorted(failed)))} no cabía en las notas: se dejó "
+                                    f"la de Audiveris corrigiendo {mended} sílaba(s)." if failed else "")))
+    elif own:
+        # Audiveris read nearly everything: its words stay where they are, misread syllables are mended
+        n = sum(correct(o, th, v, slots) for v, (o, th) in enumerate(zip(own, theirs), start=1))
+        vote_issues += merge_elisions(voted)
+        if n:
+            vote_issues.append(Issue("letra", "info", f"Coralis volvió a leer la letra en la imagen y corrigió {n} sílaba(s) "
+                                                      "que Audiveris había leído mal."))
     else:
         vote_issues += merge_elisions(voted)
     corrections.apply_lyrics(voted, answers)  # words typed note by note: they have the last word
@@ -396,6 +540,22 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     to_two_staves(joined, cfg).write("musicxml", fp=str(digital_xml))
     (run_dir / "votacion.json").write_text(json.dumps(details, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    # The notehead check alone seldom tells a right measure from a wrong one: in the 9 hand-made
+    # hymns, 91 % of the measures it alone flagged had every note right — as many as the measures
+    # with no warning at all (90 %) (2026-11-21). Its telling sign is a note in the wrong place: an
+    # expected head missing AND a printed head unexplained, with low similarity (a tenor an octave
+    # high, «Mi Dios majestuoso» c.17-18: 2 of 6 such measures were wrong, 1 of 10 otherwise).
+    # Otherwise it stays in the report, and the measure is doubtful only if something else is.
+    if cfg.get("synthesis", {}).get("alone_is_doubtful", False) is False:
+        by_index = {m.index: m for m in voted.measures}
+        other = {i.measure for i in issues
+                 if i.severity != "info" and i.rule not in ("sintesis", "letra") and i.measure is not None}
+        for i in issues:
+            if i.rule != "sintesis" or i.severity == "info" or i.measure in other:
+                continue
+            r = getattr(by_index.get(i.measure), "synth", None)
+            if not (r and r.missing and r.extra and r.similarity < 0.75):
+                i.severity = "info"
     doubtful = sorted({i.measure for i in issues if i.severity != "info" and i.measure is not None})
     _write_versions(run_dir, voted, sorted(set(doubtful) | decided), cfg,  # decided: can be changed again
                     answers.get("edits"))

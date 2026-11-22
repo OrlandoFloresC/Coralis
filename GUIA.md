@@ -56,6 +56,10 @@ En la pantalla de inicio, en **«La partitura»**:
    ```
 
    Coralis separa las sílabas solo, las coloca en las notas guiándose por lo que leyó y une las sinalefas.
+
+   Sin `.txt`, en Mac Coralis **vuelve a leer la letra en la imagen** con el lector de texto del sistema y la
+   compara con la de Audiveris: corrige las sílabas mal leídas y recupera las sinalefas perdidas («que‿en»).
+   Si Audiveris perdió mucha letra, pone la que leyó Coralis. Aun así puede equivocarse: revísala.
 4. Pulsa **Convertir**. Tarda unos 2-3 minutos por página. Al terminar dice «¡Listo!».
 
 Consejos para fotos: buena luz, la hoja derecha y completa, sin sombras. Si se transparenta la página de
@@ -79,6 +83,14 @@ cuántos compases quedaron dudosos y tiene tres botones:
 
 Si guardaste cambios en el editor sin rehacer la partitura, el himno dice «cambios sin rehacer»; se rehace
 solo antes de abrirlo, escucharlo o descargar algo.
+
+Arriba de la lista hay tres filtros y un buscador:
+
+- **Todos:** todos tus himnos, del más reciente al más antiguo.
+- **★ Favoritos:** los que marcaste tocando la estrella ☆ junto al nombre (otra vez para quitarla). La marca
+  se guarda en la carpeta del himno.
+- **Necesitan atención:** los que tienen compases por revisar, primero los que tienen más en proporción.
+- **Buscar por nombre:** escribe parte del título (no importan las tildes).
 
 ## 4. Escuchar y ensayar
 

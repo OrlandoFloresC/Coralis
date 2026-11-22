@@ -94,16 +94,20 @@ _STRONG_PAIR = re.compile(r"([aeoáéíóú])([aeoáéíóú])", re.IGNORECASE)
 # A "v" between vowels inside ONE syllable cannot be Spanish ("a-ve", "nue-va": v starts a
 # syllable). "...ve" at the end is left alone: English "love", "give".
 _Y_V = re.compile(rf"^([yY])v(?=h?[{_V}])")
-_V_MARK = re.compile(rf"(?<![{_V}])([{_V}])v(h?[{_V}])", re.IGNORECASE)  # not after a diphthong: "nueva"
+_V_MARK = re.compile(rf"([{_V}])v(h?[{_V}])", re.IGNORECASE)
 
 
 def _v_to_mark(m: re.Match, spanish: bool = False) -> str:
     if not spanish and m.group(2).lower() == "e" and m.end() == len(m.string):
         return m.group(0)  # final "-ve": English "love", "give" (in Spanish one syllable is never "lave")
+    s, i = m.string, m.start()
+    if i > 0 and s[i - 1].lower() in _V and m.end() == len(s) and not s[:i].lower().endswith(("qu", "gu")):
+        return m.group(0)  # after a diphthong, ending the word: "nueva", "nuevo" (not "dio‿or", "que‿el")
     return f"{m.group(1)}{ELISION}{m.group(2)}"
 
 
 _I_FOR_L = re.compile(r"(?<![^\W\d_])I(?=[aeoáéó])")  # "Ia historia": no Spanish word starts "Ia/Ie/Io"
+_I_INSIDE = re.compile(r"(?<=[a-záéíóúñü])I")  # "gIoria", "aIto": a capital I never follows a small letter
 _ONE_FOR_L = re.compile(r"(?<=[a-záéíóúñ])1|1(?=[a-záéíóúñ])", re.IGNORECASE)  # "ta1" = "tal"
 _BRACKET_FOR_J = re.compile(r"(?<![^\W\d_])\](?=[a-záéíóúñ])")  # "]eho-vá", "]e-sús"
 
@@ -112,16 +116,46 @@ _BRACKET_FOR_J = re.compile(r"(?<![^\W\d_])\](?=[a-záéíóúñ])")  # "]eho-v�
 _APOSTROPHE = re.compile(r"(?<=[^\W\d_])['’`´](?=[^\W\d_])")
 _L_FOR_I = re.compile(r"(?<![^\W\d_])([mnsdrMNSDR])l(?=[a-záéíóúv])")
 _I_FOR_LL = re.compile(r"(^|[\s¿¡(\"“])Il(?=[aeoáéó])")
+_RN_FOR_M = re.compile(r"rn(?=[.,;:!?)»”]*$)")
+
+
+_DIGIT_LETTER = str.maketrans({"1": "i", "0": "o", "5": "s"})
+_SPANISH_MARKS = {"\u0301", "\u0303", "\u0308"}   # acute, tilde (ñ), diaeresis (ü)
+
+
+def _ten_for_io(text: str) -> str:
+    """Small «io» read as «10» («na-c10» = «na-ció»); a «1» after a consonant with no vowel after it
+    is an «i» («di-v1-no»: no Spanish syllable ends in consonant + l like «vl»)."""
+    text = re.sub(r"(?<=[^\W\d_])10|10(?=[^\W\d_])", "io", text)
+    return re.sub(r"(?<=[b-df-hj-np-tv-zñB-DF-HJ-NP-TV-ZÑ])1(?![aeiouáéíóúAEIOUÁÉÍÓÚ])", "i", text)
+
+
+def _digits_in_word(text: str) -> str:
+    """Digits inside a word that has letters are misread letters (lyrics have no digits)."""
+    return re.sub(r"[^\W_]*\d[^\W_]*",
+                  lambda m: m.group(0).translate(_DIGIT_LETTER)
+                  if any(c.isalpha() for c in m.group(0)) else m.group(0), text)
+
+
+def _odd_marks(text: str) -> str:
+    out = unicodedata.normalize("NFD", text)
+    out = "".join(c for c in out if not (unicodedata.combining(c) and c not in _SPANISH_MARKS))
+    return unicodedata.normalize("NFC", out)
 
 
 def fix_ocr_letters(text: str, spanish: bool = True) -> str:
     """Letters the OCR confuses: "I" for "l", "]" for "J", "1" for "l" inside a word."""
     text = unicodedata.normalize("NFKC", text)  # typeset ligatures: "ﬁ" -> "fi"
     text = _BRACKET_FOR_J.sub("J", text)
+    text = _ten_for_io(text)                # «na-c10» = «na-ció», «di-v1-no»: before "1" = "l" («ta1»)
     text = _ONE_FOR_L.sub("l", text)
+    text = _I_INSIDE.sub("l", text)
     if not spanish:
         return text
     text = _APOSTROPHE.sub("", text)        # «p’e»: a speck read as an apostrophe
+    text = _digits_in_word(text)            # what digits are left inside a word: 0 = o, 1 = i
+    text = _odd_marks(text)                 # «tẹ»: a mark Spanish does not use (a speck under the letter)
+    text = _RN_FOR_M.sub("m", text)         # «corn-pa-ñí-a»: "m" read as "rn"; no Spanish syllable ends in "rn"
     text = _I_FOR_LL.sub(r"\1ll", text)     # «Ila», «Ilan»: "ll" read as "Il"
     text = _L_FOR_I.sub(r"\1i", text)       # «mlva» = «mi‿a»: no word starts with "ml", "nl", "sl"...
     return _I_FOR_L.sub("l", text)
@@ -176,6 +210,14 @@ def split_glued_syllables(score: ChoralScore) -> int:
                     continue
                 text, syl = e.lyrics[n]
                 core = text.strip()
+                glued = re.fullmatch(r"([^\W\d_]+[,;:.!?])([^\W\d_]+)", core)
+                if glued and (k + 1 < len(evs)) and n not in evs[k + 1].lyrics:
+                    # «ñor,mar» under «Se-ñor, mar-chan-do»: a word's end and the next word's start
+                    head, tail = glued.groups()
+                    e.lyrics[n] = (head, "end" if syl in ("middle", "end") else "single")
+                    evs[k + 1].lyrics[n] = (tail, "begin" if syl in ("begin", "middle") else "single")
+                    spread += 1
+                    continue
                 if not core.isalpha() or ELISION in core:
                     continue
                 parts = syllabify(core)
@@ -192,3 +234,27 @@ def split_glued_syllables(score: ChoralScore) -> int:
                     x.lyrics[n] = (part, last if j == len(parts) - 1 else "middle")
                 spread += 1
     return spread
+
+
+def lower_ocr_capitals(score: ChoralScore) -> int:
+    """«Vi-llas», «Voy», «Vi-vas»: the OCR reads a small «v» as «V» (same shape, other size). In the
+    middle of a sentence a syllable starting with «V» and lowercase after it goes lowercase. Only
+    «V»: other capitals in hymns are often meant («Señor», «Su», «Cristo»). Returns how many changed."""
+    changed = 0
+    for line in sorted({n for m in score.measures for evs in m.voices.values() for e in evs for n in e.lyrics}):
+        prev = None
+        for m in score.measures:
+            seen = set()
+            for v in ("soprano", "alto", "tenor", "bass"):
+                for e in m.voices.get(v, []):
+                    if line not in e.lyrics or (e.offset in seen and v != "soprano"):
+                        continue
+                    seen.add(e.offset)
+                    text, syl = e.lyrics[line]
+                    if (len(text) > 1 and text[0] == "V" and text[1:2].islower() and prev is not None
+                            and not prev.rstrip().endswith((".", "!", "?", ";", ":"))):
+                        e.lyrics[line] = ("v" + text[1:], syl)
+                        changed += 1
+                    if v == "soprano" or e.offset not in seen:
+                        prev = e.lyrics[line][0]
+    return changed

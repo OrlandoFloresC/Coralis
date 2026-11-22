@@ -20,6 +20,8 @@ datas += collect_data_files("certifi")
 
 hiddenimports = collect_submodules("omr_coral") + collect_submodules("music21")
 hiddenimports = [h for h in hiddenimports if not h.startswith("music21.corpus.") and ".test" not in h]
+if sys.platform == "darwin":   # Apple's text recognizer (the lyrics read by Coralis itself)
+    hiddenimports += ["Vision", "Foundation", "objc"]
 
 a = Analysis(
     [str(ROOT / "packaging" / "coralis_main.py")],
@@ -50,7 +52,7 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName": "Coralis",
             "CFBundleDisplayName": "Coralis",
-            "CFBundleShortVersionString": "0.10.0",
+            "CFBundleShortVersionString": "0.11.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
             "NSDocumentsFolderUsageDescription": "Coralis guarda las partituras convertidas en Documentos/Coralis.",

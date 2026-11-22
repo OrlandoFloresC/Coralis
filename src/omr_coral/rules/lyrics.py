@@ -98,8 +98,8 @@ def _mismatch_message(counts: dict[int, int], attacks: int, slots: int) -> str:
     return f"{text[0].upper()}{text[1:]}. En este compás {where}.{hint}"
 
 
-_LEADING = "¡¿"
-_TRAILING = ".,;:!?"
+_LEADING = "¡¿\"“«‘'"   # quotation marks: someone speaks («"Tú eres…»)
+_TRAILING = ".,;:!?\"”»’'"
 _ELISION = " ‿_~"  # spaces and elision ties (‿) join two syllables on one note
 _VOWELS = set("aeiouyáéíóúüàèìòùâêîôûäëïö")
 

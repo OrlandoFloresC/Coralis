@@ -42,7 +42,10 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
         if a and b and a + b == ms[i].bar_length and not ms[i].pickup:
             split_ok |= {i, i + 1}
 
-    last = len(ms) - 1
+    # the last measure that sounds: a silent measure an engine added after the end does not make
+    # the real final measure (completing the pickup) look short
+    last = max((m.index for m in ms if any(not e.is_rest for evs in m.voices.values() for e in evs)),
+               default=len(ms) - 1)
     for m in ms:
         ends = _ends(m)
         for v in VOICES:

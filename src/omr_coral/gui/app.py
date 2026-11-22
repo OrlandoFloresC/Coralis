@@ -65,6 +65,7 @@ def _open_path(path: Path) -> None:
 
 
 PENDING = "pendiente_rehacer.txt"  # corrections saved, the score not rebuilt yet
+FAVORITE = "favorito.txt"   # ★ in the list of hymns
 
 
 class Api:
@@ -851,7 +852,19 @@ class Api:
                 continue
             items.append(self._summary(d))
         items.sort(key=lambda x: x["time"], reverse=True)
-        return items[:30]
+        return items   # all of them: the window filters (favourites, needing attention) and searches
+
+    def set_favorite(self, run_dir: str, on: bool) -> bool:
+        """★: a hymn the user loves. Kept inside the hymn's folder (it travels with it)."""
+        mark = Path(run_dir) / FAVORITE
+        try:
+            if on:
+                mark.write_text("★\n", encoding="utf-8")
+            else:
+                mark.unlink(missing_ok=True)
+        except OSError:
+            return False
+        return True
 
     def has_musescore(self) -> bool:
         from ..tools import find_musescore
@@ -878,6 +891,7 @@ class Api:
             "has_digital": (run / f"{title} (copia digital).musicxml").exists(),
             "has_versions": _has_versions(run),
             "pending": (run / PENDING).exists(),
+            "favorite": (run / FAVORITE).exists(),
         }
 
     def _run(self, paths: list[Path], lyrics: str | None, title: str | None) -> None:
