@@ -152,7 +152,12 @@ def _title(cands: list[Candidate]) -> str | None:
 
     from ..model.lyrics_fix import fix_ocr_letters
 
-    return fix_ocr_letters(Counter(titles).most_common(1)[0][0])  # the title most readings agree on
+    best, n = Counter(titles).most_common(1)[0]   # the title most readings agree on
+    # a title only one of several readings saw is an OCR scrap of a handwritten heading or the
+    # composer's name («¡VM/ME óLEETH» for Natalie Sleeth): the file name is then the better title
+    if n < 2 and sum(c.engine == "audiveris" for c in cands) >= 2:
+        return None
+    return fix_ocr_letters(best)
 
 
 def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], dict]:
@@ -212,6 +217,12 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
             new_events = copy.deepcopy(best["events"])
             for e in new_events:
                 e.lyrics = {}
+                # a printed accidental: two readings or more saw the sign on this same note (Audiveris
+                # marks them, homr not; one reading alone may have taken a speck for a ♭)
+                if e.pitch:
+                    e.shown = sum(1 for c, j in aligned if any(
+                        x.printed and x.offset == e.offset and x.pitch == e.pitch
+                        for x in c.score.measures[j].voices.get(v, []))) >= 2
             m.voices[v] = new_events
             # agreement on the notes: versions that differ only in a tie («Puertas abiertas» c.28:
             # 4 homr readings tie the last note, 3 Audiveris readings do not) agree on what is sung
@@ -224,6 +235,30 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
                           "sources": best["sources"], "notes_weight": notes_weight, "settled": settled}
             m_detail["voices"][v] = {"agreement": round(best["weight"] / total, 3), "versions": len(groups),
                                      "sources": best["sources"]}
+
+        _break_ties_by_length(m)
+
+        # ---- a voice left silent for the whole measure while the other voice of its staff sings,
+        # when a version with notes had (nearly) as many votes: a measure one engine lost entirely
+        # («Recuerdos de infancia»: Audiveris read the upper staff of c.2-6 as a whole rest, homr
+        # saw the unison; 4 against 4)
+        for v in VOICES:
+            alts = m.alternatives.get(v) or []
+            chosen = next((g for g in alts if g.get("chosen")), None)
+            if (chosen is None or any(not e.is_rest for e in chosen["events"])
+                    or not any(not e.is_rest for e in m.voices.get(PARTNER[v], []))):
+                continue
+            sung = [g for g in alts if any(not e.is_rest for e in g["events"]) and not g["errors"]]
+            better = max(sung, key=lambda g: g["weight"], default=None)
+            if better is None or better["weight"] < 0.75 * chosen["weight"]:
+                continue
+            new_events = copy.deepcopy(better["events"])
+            for e in new_events:
+                e.lyrics = {}
+            m.voices[v] = new_events
+            for g in alts:
+                g["chosen"] = g is better
+            m.votes[v].update({"weight": better["weight"], "sources": better["sources"]})
 
         # ---- lyrics, verse by verse
         # A reading that lost a lyric line in this system has its verses shifted
@@ -324,6 +359,23 @@ def vote(cands: list[Candidate], cfg: dict) -> tuple[ChoralScore, list[Issue], d
     _fix_endings(voted)
     _layout_fallback(voted, cands)
     _drop_phantoms(voted, cands, maps, marks_engines, issues, details)
+    if voted.measures:
+        # what the voted notes hold decides the pickup, not the reference: it may have joined the
+        # pickup and the next bar (a missed barline: «El cielo es Jesús»), or read an eighth more
+        # in it than the vote kept («El camino es escabroso»)
+        from ..model.score import _detect_pickup_and_number
+
+        first = voted.measures[0]
+        was, was_duration = first.pickup, first.duration
+        first.pickup, first.duration = False, first.bar_length
+        _detect_pickup_and_number(voted.measures)
+        if was and not first.pickup:   # the vote filled it (padding): keep the reference's
+            first.pickup, first.duration = True, was_duration
+            for m in voted.measures:
+                m.number = m.index
+        if first.pickup != was:
+            for md, m in zip(details["measures"], voted.measures):
+                md["measure"] = m.label
     return voted, issues, details
 
 
@@ -381,16 +433,7 @@ def _fit_bars(voted: ChoralScore, issues: list[Issue]) -> None:
                 swap[v] = alt
             else:
                 for v, g in swap.items():
-                    # the voted words go on the new notes in order (not the other reading's OCR)
-                    words = [e.lyrics for e in m.voices[v] if e.lyrics]
-                    m.voices[v] = copy.deepcopy(g["events"])
-                    attacks = [e for e in m.voices[v] if e.is_attack]
-                    for e in m.voices[v]:
-                        e.lyrics = {}
-                    for e, ly in zip(attacks, words):
-                        e.lyrics = dict(ly)
-                    for alt in m.alternatives[v]:
-                        alt["chosen"] = alt is g
+                    _take_version(m, v, g)
             if any(_sung_end(evs) != length for v, evs in m.voices.items() if v in singing):
                 continue
         if any(not e.filled for evs in m.voices.values() for e in evs if e.offset >= length):
@@ -407,6 +450,96 @@ def _fit_bars(voted: ChoralScore, issues: list[Issue]) -> None:
             st.time = new
         for v, evs in m.voices.items():
             m.voices[v] = [e for e in evs if e.offset < length]
+    _stretch_bars(ms, issues)
+
+
+def _break_ties_by_length(m) -> None:
+    """An exact tie between two versions of a voice (4 Audiveris readings against 4 homr ones) went
+    to the reference reading. When the voices decided clearly all last the same, the tied version
+    that lasts that long is the one («El camino es escabroso»: homr adds an eighth to the pickup of
+    three voices; the soprano, 4 to 3, has the printed two)."""
+    def eff(g):
+        return g["weight"] * (0.5 if g["avisos"] else 1.0)
+
+    tied, clear = {}, []
+    for v in VOICES:
+        alts = [g for g in m.alternatives.get(v) or [] if not g["errors"]]
+        chosen = next((g for g in alts if g.get("chosen")), None)
+        if chosen is None:
+            continue
+        rivals = [g for g in alts if g is not chosen and eff(g) == eff(chosen)]
+        if rivals:
+            tied[v] = (chosen, rivals)
+        elif any(not e.is_rest for e in chosen["events"]):
+            clear.append(_sung_end(chosen["events"]))
+    if not tied or not clear or len(set(clear)) != 1:
+        return
+    length = clear[0]
+    for v, (chosen, rivals) in tied.items():
+        if _sung_end(chosen["events"]) == length:
+            continue
+        fit = [g for g in rivals if _sung_end(g["events"]) == length]
+        if len(fit) == 1:
+            _take_version(m, v, fit[0])
+            m.votes[v].update({"weight": fit[0]["weight"], "sources": fit[0]["sources"]})
+
+
+def _take_version(m, v: str, g: dict) -> None:
+    """Voice v of measure m takes another reading's version; the voted words go on its notes in
+    order (not the other reading's OCR)."""
+    words = [e.lyrics for e in m.voices[v] if e.lyrics]
+    m.voices[v] = copy.deepcopy(g["events"])
+    attacks = [e for e in m.voices[v] if e.is_attack]
+    for e in m.voices[v]:
+        e.lyrics = {}
+    for e, ly in zip(attacks, words):
+        e.lyrics = dict(ly)
+    for alt in m.alternatives[v]:
+        alt["chosen"] = alt is g
+
+
+def _stretch_bars(ms: list, issues: list[Issue]) -> None:
+    """A new time the engines took late: «Sed bienvenidos» changes 2/4 → 3/4 at the end of page 1,
+    the only Audiveris reading kept 2/4 all along and homr starts 3/4 with page 2, so c.21-23 came
+    out as 2/4 bars holding three quarters. When every singing voice ends together PAST the bar,
+    and the next measure (walking back) already has a time of exactly that length, the bar is of
+    that time. A missed barline (two bars in one) is twice the bar, not the neighbour's time."""
+    for k in range(len(ms) - 2, 0, -1):
+        m, nxt = ms[k], ms[k + 1]
+        if m.pickup or nxt.time == m.time or nxt.bar_length <= m.bar_length:
+            continue
+        length = nxt.bar_length
+        singing = {v: evs for v, evs in m.voices.items() if any(not e.is_rest for e in evs)}
+        if len(singing) < 2:
+            continue
+        off = [v for v, evs in singing.items() if max(e.end for e in evs) != length]
+        if len(off) * 2 > len(singing):
+            continue
+        # the voices that do not fill it won a version from a reading misaligned there: another
+        # reading of them that fills the new bar exactly
+        swap = {}
+        for v in off:
+            g = next((g for g in sorted(m.alternatives.get(v, []), key=lambda g: -g["weight"])
+                      if any(not e.is_rest for e in g["events"])
+                      and max(e.end for e in g["events"]) == length), None)
+            if g is None:
+                break
+            swap[v] = g
+        else:
+            for v, g in swap.items():
+                _take_version(m, v, g)
+        if len(swap) != len(off):
+            continue
+        new = nxt.time
+        issues.append(Issue("estructura", "info",
+                            f"Compás de {new[0]}/{new[1]} (las voces lo llenan; el cambio de compás "
+                            f"se leyó tarde) leído como {m.time[0]}/{m.time[1]}.", m.index))
+        m.time, m.bar_length, m.duration = new, length, length
+        for st in m.staves:
+            st.time = new
+        for evs in m.voices.values():
+            if evs and all(e.is_rest for e in evs):   # a silent voice: its rest covers the new bar
+                evs[-1].duration = length - evs[-1].offset
 
 
 def _sung_end_all(m) -> Fraction:
@@ -607,15 +740,29 @@ def _drop_phantoms(voted: ChoralScore, cands: list[Candidate], maps: dict, marks
     has that measure and it holds only rests, it is dropped.
     """
     full = [c for c in cands if c.engine in marks_engines]
-    if not full:
-        return
     keep_m, keep_d = [], []
     dropped = []
+    total = sum(c.weight for c in cands)
+    leading = True   # still before the first measure with notes
     for k, (m, md) in enumerate(zip(voted.measures, details["measures"])):
-        seen_by_full = any(k in maps[id(c)] for c in full)
+        seen_by_full = not full or any(k in maps[id(c)] for c in full)
         silent = all(e.is_rest for evs in m.voices.values() for e in evs)
-        if not seen_by_full and silent and not m.pickup:
+        leading = leading and silent
+        # silent measures before the music that most readings do not have: staves a reading saw in
+        # the bleed-through of a cover page («A la nanita nana»: a 4/4 in C before the 3/4 in F)
+        ghost = leading and sum(
+            c.weight for c in cands if k in maps[id(c)]
+            and all(e.is_rest for evs in c.score.measures[maps[id(c)][k]].voices.values() for e in evs)) * 2 < total
+        if silent and not m.pickup and (not seen_by_full or ghost):
             dropped.append(m.label)
+            continue
+        if keep_m and _doubled(keep_m[-1], m, k, full, maps, voted.measures):
+            # the one of the two that more Audiveris readings took for their measure stays
+            if _audiveris_weight(k, full, maps) > _audiveris_weight(k - 1, full, maps):
+                dropped.append(keep_m[-1].label)
+                keep_m[-1], keep_d[-1] = m, md
+            else:
+                dropped.append(m.label)
             continue
         keep_m.append(m)
         keep_d.append(md)
@@ -643,8 +790,26 @@ def _drop_phantoms(voted: ChoralScore, cands: list[Candidate], maps: dict, marks
     voted.measures = keep_m
     details["measures"] = keep_d
     issues.append(Issue("estructura", "info",
-                        f"Se quitaron {len(dropped)} compás(es) vacíos que solo veía homr "
-                        f"(no están en la imagen): {', '.join(dropped)}."))
+                        f"Se quitaron {len(dropped)} compás(es) vacíos o repetidos que casi ninguna lectura "
+                        f"veía (no están en la imagen): {', '.join(dropped)}."))
+
+
+def _doubled(prev, m, k: int, full: list, maps: dict, measures: list) -> bool:
+    """homr wrote one measure as two («El cielo es Jesús» c.2-3: «A♭. G A» twice): every Audiveris
+    reading aligned the SAME measure of its own with one or the other, none has two measures there."""
+    if len(full) < 2 or prev is not measures[k - 1] or m.pickup or prev.pickup:
+        return False
+    own = set()
+    for c in full:
+        here = [maps[id(c)][j] for j in (k - 1, k) if j in maps[id(c)]]
+        if len(here) != 1:
+            return False
+        own.add(here[0])
+    return len(own) == 1
+
+
+def _audiveris_weight(k: int, full: list, maps: dict) -> float:
+    return sum(c.weight for c in full if k in maps[id(c)])
 
 
 _FLAGS = ("repeat_start", "repeat_end", "segno", "coda", "to_coda", "fine")

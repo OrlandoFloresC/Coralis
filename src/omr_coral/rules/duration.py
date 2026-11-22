@@ -37,9 +37,11 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
     issues = []
     ms = score.measures
     split_ok: set[int] = set()
+    # the piece's usual bar: the two halves of a cut bar may have been given another time each
+    usual = max({m.bar_length for m in ms}, key=lambda L: sum(1 for m in ms if m.bar_length == L)) if ms else 0
     for i in range(len(ms) - 1):
         a, b = _uniform_short(ms[i]), _uniform_short(ms[i + 1])
-        if a and b and a + b == ms[i].bar_length and not ms[i].pickup:
+        if a and b and a + b in (ms[i].bar_length, usual) and not ms[i].pickup:
             split_ok |= {i, i + 1}
 
     # the last measure that sounds: a silent measure an engine added after the end does not make

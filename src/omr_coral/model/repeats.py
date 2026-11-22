@@ -202,7 +202,7 @@ def _real_lines(cs: ChoralScore) -> set[int]:
     return {n for n in real if n == 1 or not _echoes_line_1(cs, n)}
 
 
-def _echoes_line_1(cs: ChoralScore, n: int) -> bool:
+def _echoes_line_1(cs: ChoralScore, n: int, first_line: int = 1) -> bool:
     """Line n repeats line 1's words wherever it appears: the words of other voices in a
     chorus («¿Cómo podré estar triste?»: the men's «Feliz cantando alegre» under their own
     notes), not another stanza."""
@@ -212,11 +212,11 @@ def _echoes_line_1(cs: ChoralScore, n: int) -> bool:
         for evs in m.voices.values():
             for e in evs:
                 for k, (text, _) in e.lyrics.items():
-                    if k in (1, n) and any(c.isalpha() for c in text):
+                    if k in (first_line, n) and any(c.isalpha() for c in text):
                         words.setdefault(k, {})[e.offset] = text.strip(",.;:!?¡¿ ").lower()
         if words.get(n):
             total += 1
-            line, first = words[n], words.get(1, {})
+            line, first = words[n], words.get(first_line, {})
             equal = sum(first.get(off) == t for off, t in line.items())
             same += equal >= len(line) / 2
             syl_same += equal
@@ -254,7 +254,9 @@ def drop_echo_lines(cs: ChoralScore) -> list[int]:
     """Remove lyric lines that only repeat line 1 (other voices' words in a chorus), so they
     are not counted as stanzas; higher lines move down. Returns the removed line numbers."""
     top = cs.verses
-    gone = [n for n in range(2, top + 1) if _echoes_line_1(cs, n)]
+    # an earlier line, not only line 1: on a 4-staff page the baritone's copy of the words can come
+    # out as lines of its own («Perfecto amor», system 2: lines 4 and 5 repeat lines 2 and 3)
+    gone = [n for n in range(2, top + 1) if any(_echoes_line_1(cs, n, k) for k in range(1, n))]
     if not gone:
         return []
     new_no = {}

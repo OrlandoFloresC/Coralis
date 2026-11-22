@@ -40,7 +40,9 @@ def _written_unison(score: ChoralScore, upper: str, lower: str, run: int = 4) ->
     stretch: list[Measure] = []
 
     def close() -> None:
-        if len(stretch) >= run and any(_agreed(x, upper, lower) for x in stretch):
+        # 8 measures or more in a row: written so («Recuerdos de infancia», a «doble dúo»: two voices
+        # per staff in unison for 40 measures); a voice is not lost identically for that long
+        if len(stretch) >= max(8, run) or (len(stretch) >= run and any(_agreed(x, upper, lower) for x in stretch)):
             out.update(x.index for x in stretch)
         stretch.clear()
 

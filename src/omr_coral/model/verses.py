@@ -213,6 +213,30 @@ def merge_split_measures(cs: ChoralScore) -> ChoralScore:
     while i < len(ms):
         a = ms[i]
         b = ms[i + 1] if i + 1 < len(ms) else None
+        # the two halves may have been given a time each (6/8 + 3/8 for a 9/8 bar, «Diré a Cristo»):
+        # when together they make exactly the bar around them, they are one measure in that time
+        if (b is not None and not a.pickup and b.system != a.system
+                and not a.marks.repeat_end and not b.marks.repeat_start and a.marks.volta == b.marks.volta):
+            # the piece's usual bar (the measure next to them may be a cut one too)
+            usual = max(set(m.time for m in ms), key=lambda t: sum(1 for m in ms if m.time == t))
+            around = next((m for m in ms if m.time == usual), None)
+            # what the halves hold, not the time each was given (6/8 + 3/8 of a 9/8; or both read 3/4
+            # while they hold 2 + 2 beats of a 4/4: «Vendrá pronto, ya viene»)
+            la, lb = _content_length(a), _content_length(b)
+            if around is not None and la + lb != around.bar_length:
+                la, lb = _sung_length(a), _sung_length(b)
+            if (around is not None and (a.time != usual or b.time != usual or a.time != b.time)
+                    and 0 < la < around.bar_length and 0 < lb < around.bar_length
+                    and la + lb == around.bar_length):
+                for v in VOICES:
+                    a.voices[v] = _cut(a.voices.get(v, []), la) + _cut(b.voices.get(v, []), lb, la)
+                _join_marks(a, b, la)
+                a.time, a.bar_length, a.duration = around.time, around.bar_length, around.bar_length
+                for st in a.staves:
+                    st.time = around.time
+                merged.append(a)
+                i += 2
+                continue
         # a repeat sign between them means two real measures (e.g. a 1st ending and the bar after)
         if (b is not None and not a.pickup and b.system != a.system and a.time == b.time
                 and not a.marks.repeat_end and not b.marks.repeat_start and a.marks.volta == b.marks.volta):

@@ -15,7 +15,7 @@ import copy
 from pathlib import Path
 
 from ..model.issues import Issue
-from ..model.score import VOICES, ChoralScore, Event
+from ..model.score import PARTNER, VOICES, ChoralScore, Event
 from .compare import Geometry, compare
 
 _VOICE_ES = {"soprano": "soprano", "alto": "contralto", "tenor": "tenor/barítono", "bass": "bajo"}
@@ -50,6 +50,25 @@ def _move_lyrics(old: list[Event], new: list[Event]) -> list[Event]:
     return new
 
 
+def _shape(events: list[Event]) -> list[tuple]:
+    return [(e.offset, e.duration, e.pitch) for e in events]
+
+
+def _follow_partner(m, v: str, old: dict, new: dict) -> None:
+    """The staff partner sang exactly what voice v had (a unison or a solo printed once: «El cielo es
+    Jesús» c.2): it takes the new version too, when one of its readings has it."""
+    p = PARTNER[v]
+    if _shape(m.voices.get(p, [])) != _shape(m.voices[v]):
+        return
+    alts = m.alternatives.get(p, [])
+    twin = next((a for a in alts if _shape(a["events"]) == _shape(new["events"])), None)
+    if twin is None:
+        return
+    m.voices[p] = _move_lyrics(m.voices[p], twin["events"])
+    for a in alts:
+        a["chosen"] = a is twin
+
+
 def _min_agreement(m) -> float:
     ratios = [d["weight"] / d["total"] for d in m.votes.values() if d.get("total")]
     return min(ratios) if ratios else 1.0
@@ -78,6 +97,11 @@ def refine(score: ChoralScore, cfg: dict) -> list[Issue]:
                 cur = next((a for a in alts if a.get("chosen")), None)
                 if not alts or cur is None:
                     continue
+                # (almost) every reading agrees on this voice: the detector does not overrule them
+                # («Mis culpas él llevó»: the pickup's lone quarter rest, 8 of 10 readings, became a
+                # half-note A2 one reading saw — matching heads of the next measure)
+                if cur["weight"] >= trust_agreement * sum(a["weight"] for a in alts):
+                    continue
                 best_alt, best_res = None, current
                 for alt in alts:
                     if alt is cur or alt["errors"] > cur["errors"] or alt["avisos"] > cur["avisos"]:
@@ -91,6 +115,7 @@ def refine(score: ChoralScore, cfg: dict) -> list[Issue]:
                     if res.matched > best_res.matched and res.similarity >= best_res.similarity + min_gain:
                         best_alt, best_res = alt, res
                 if best_alt is not None:
+                    _follow_partner(m, v, cur, best_alt)
                     m.voices[v] = _move_lyrics(m.voices[v], best_alt["events"])
                     cur["chosen"], best_alt["chosen"] = False, True
                     m.votes[v] = {**m.votes.get(v, {}), "weight": best_alt["weight"],

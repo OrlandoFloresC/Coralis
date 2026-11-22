@@ -35,11 +35,49 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
         if prev_time and m.time != prev_time and not filled_exactly:
             issues.append(Issue("coherencia", "aviso",
                                 f"Cambio de compás {prev_time[0]}/{prev_time[1]} → {m.time[0]}/{m.time[1]}.", m.index))
-        if prev_key is not None and m.key_fifths != prev_key:
+        if prev_key is not None and m.key_fifths != prev_key and not _key_confirmed(score, m.index, prev_key):
             issues.append(Issue("coherencia", "aviso",
                                 f"Cambio de armadura {_key_es(prev_key)} → {_key_es(m.key_fifths)}.", m.index))
         prev_time, prev_key = m.time, m.key_fifths
     return issues
+
+
+_SHARPS = "FCGDAEB"   # order in which a key signature alters the letters (flats: reversed)
+
+
+def _altered(fifths: int) -> dict[str, int]:
+    """{letter: alteration} a key signature puts on the notes."""
+    if fifths > 0:
+        return {c: 1 for c in _SHARPS[:fifths]}
+    return {c: -1 for c in _SHARPS[::-1][:-fifths]}
+
+
+def _key_confirmed(score: ChoralScore, k: int, old: int) -> bool:
+    """A printed key change («La cruz excelsa»: 1 ♭ → 2 ♭ → 3 ♭, double barlines): the new key lasts
+    at least 4 measures and the notes sung there take its alterations (E♭ after 1 → 2 flats), not
+    the old key's. A misread key flickers, or leaves the notes contradicting it."""
+    ms = score.measures
+    new = ms[k].key_fifths
+    span = []
+    for m in ms[k:k + 16]:
+        if m.key_fifths != new:
+            break
+        span.append(m)
+    if len(span) < 4:
+        return False
+    a, b = _altered(old), _altered(new)
+    letters = {c for c in set(a) | set(b) if a.get(c, 0) != b.get(c, 0)}
+    with_new = with_old = 0
+    for m in span:
+        for evs in m.voices.values():
+            for e in evs:
+                if e.is_rest or not e.pitch or not e.is_attack:
+                    continue
+                letter, alter = e.pitch[0], (e.pitch.count("#") - e.pitch.count("-"))
+                if letter in letters:
+                    with_new += alter == b.get(letter, 0)
+                    with_old += alter == a.get(letter, 0)
+    return with_new >= 2 and with_new >= 2 * with_old   # real naturals happen (V of V)
 
 
 def _key_es(fifths: int) -> str:

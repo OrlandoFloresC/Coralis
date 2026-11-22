@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from fractions import Fraction
@@ -168,12 +169,71 @@ def load_candidates(run_dir: Path, cfg: dict) -> list[Candidate]:
                 image_dir = run_dir / "pages"
             cands.append(Candidate(engine_dir.name, vdir.name, cs, image_dir,
                                    float(weights.get(engine_dir.name, 1.0))))
-    _old_tenor_clef(cands)
-    _octave_treble_clef(cands, set(cfg.get("voting", {}).get("marks_engines", ["audiveris"])))
+    _split_glued_pickup(cands)
+    eight, old = _octave_clef_in_image(run_dir)
+    _old_tenor_clef(cands, forced=old)
+    _octave_treble_clef(cands, set(cfg.get("voting", {}).get("marks_engines", ["audiveris"])),
+                        forced=eight or old)
     return _drop_broken_systems(cands, staves)
 
 
-def _old_tenor_clef(cands: list[Candidate]) -> None:
+def _octave_clef_in_image(run_dir: Path) -> tuple[bool, bool]:
+    """(a small «8» under the upper staff's treble clef, the old two-bar tenor clef), from the page
+    images (synthesis/clef8.py): the engines miss both; the upper voices sing an octave lower."""
+    try:
+        from .ocr.lyrics_ocr import _layout
+        from .synthesis.clef8 import octave_eight, old_tenor_clef
+
+        found = _layout(run_dir)
+        if not found:
+            return False, False
+        eight = bool(octave_eight(*found))
+        return eight, (not eight and bool(old_tenor_clef(*found)))
+    except Exception:  # noqa: BLE001  (an image that cannot be read changes nothing)
+        return False, False
+
+
+def _split_glued_pickup(cands: list[Candidate]) -> None:
+    """homr may miss the barline after the pickup and read it with the first measure as one measure
+    longer than the bar («Al Rey adorad»: mi | do♯ mi mi in 3/4 read as one 4-beat measure); being the
+    reference (most readings agree on the count), measure 1 was lost. When Audiveris' readings agree on
+    a pickup of length L and a reading's first measure lasts the bar plus L, it is split in two."""
+    from fractions import Fraction
+
+    from .model.score import Event
+
+    pick = [c.score.measures[0].duration for c in cands if c.engine == "audiveris" and c.score.measures
+            and c.score.measures[0].pickup]
+    if len(pick) < 2 or len(set(pick)) != 1:
+        return
+    L = pick[0]
+    for c in cands:
+        ms = c.score.measures
+        if not ms or ms[0].pickup:
+            continue
+        m0 = ms[0]
+        end = max((e.end for evs in m0.voices.values() for e in evs if not e.filled and not e.is_rest), default=0)
+        if end != m0.bar_length + L:
+            continue
+        first, second = copy.deepcopy(m0), m0
+        for v, evs in m0.voices.items():
+            first.voices[v] = [copy.deepcopy(e) for e in evs if e.offset < L] or [Event(Fraction(0), L)]
+            rest = [copy.deepcopy(e) for e in evs if e.offset >= L]
+            for e in rest:
+                e.offset -= L
+            second.voices[v] = rest or [Event(Fraction(0), m0.bar_length)]
+        first.pickup, first.duration = True, L
+        second.duration = second.bar_length
+        ms.insert(0, first)
+        for k, m in enumerate(ms):
+            m.index = k
+            m.number = k
+        for i in c.issues:
+            if i.measure is not None:
+                i.measure += 1
+
+
+def _old_tenor_clef(cands: list[Candidate], forced: bool = False) -> None:
     """Men's quartet hymnals (Simmonds, «Para cuartetos varoniles») print the upper staff in an old
     tenor clef (two short bars) that no engine knows: each reading takes it for a G, F or C clef
     («El mundo no es mi hogar»). In an ordinary hymn every reading agrees on the upper clef; when
@@ -191,7 +251,8 @@ def _old_tenor_clef(cands: list[Candidate]) -> None:
     seen = {clef for _, clef in per_cand}
     g_like = [c for c, clef in per_cand if clef in ("G", "G8vb")]
     odd = [c for c, clef in per_cand if clef in ("F", "C")]
-    if not (g_like and odd and len(g_like) >= 2 and seen <= {"G", "G8vb", "F", "C"}):
+    # forced: the image shows that clef (synthesis/clef8.py), even when every reading took it for G
+    if not forced and not (g_like and odd and len(g_like) >= 2 and seen <= {"G", "G8vb", "F", "C"}):
         return
     from music21 import pitch as m21pitch
 
@@ -215,9 +276,46 @@ def _old_tenor_clef(cands: list[Candidate]) -> None:
     for c in cands:   # measure by measure: a reading may see G on one system and F on the next
         for j, m in enumerate(c.score.measures):
             st = upper(m)
-            if st is not None and st.clef in ("F", "C"):
+            if st is None or st.clef not in ("F", "C"):
+                continue
+            if forced:
+                # the image says it is the tenor clef: the notes are where they are on the staff; read
+                # them again as a treble clef an octave down (every reading may have taken it for F:
+                # «Si Jesús va conmigo»)
+                _reread_as_octave_treble(m, st)
+            else:
                 for v in ("soprano", "alto"):
                     c.issues.append(Issue("rango", "error", "Clave antigua de tenor leída como otra clave.", j, v))
+
+
+# how many staff steps a note moves when its staff is read as an octave treble clef instead (the
+# middle line is d3 in the F clef, c4 in the alto C clef, b3 in the octave treble clef)
+_TO_G8VB_STEPS = {"F": 5, "C": -1}
+
+
+def _reread_as_octave_treble(m, st) -> None:
+    from music21 import key as m21key, pitch as m21pitch
+
+    from .model.corrections import _set_pitch
+
+    shift = _TO_G8VB_STEPS[st.clef]
+    ks = m21key.KeySignature(m.key_fifths)
+    for v in ("soprano", "alto"):
+        for e in m.voices.get(v, []):
+            if not e.pitch:
+                continue
+            p = m21pitch.Pitch(e.pitch)
+            in_key = ks.accidentalByStep(p.step)
+            own = (float(p.accidental.alter) if p.accidental else 0.0) != (float(in_key.alter) if in_key else 0.0)
+            steps = "CDEFGAB"
+            idx = p.octave * 7 + steps.index(p.step) + shift
+            step, octave = steps[idx % 7], idx // 7
+            acc = ks.accidentalByStep(step)
+            q = m21pitch.Pitch(step + str(octave))
+            if acc is not None and not own:
+                q.accidental = m21pitch.Accidental(acc.alter)
+            _set_pitch(e, q)
+    st.clef = "G8vb"
 
 
 def _drop_broken_systems(cands: list[Candidate], staves: int) -> list[Candidate]:
@@ -245,7 +343,7 @@ def _safe_layout(omr: Path):
         return None
 
 
-def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
+def _octave_treble_clef(cands: list[Candidate], clef_engines: set, forced: bool = False) -> None:
     """Men's quartets print the upper staff in a treble clef with a small 8 below (an octave
     lower). homr never sees the 8 and Audiveris misses it on some systems; a piece does not
     change that clef from one system to the next. When most of the upper staves Audiveris read
@@ -262,7 +360,8 @@ def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
 
     seen = [st.clef for c in cands if c.engine in clef_engines for m in c.score.measures
             for _, st, _ in upper_staves(m) if st.clef in ("G", "G8vb")]
-    if not seen or seen.count("G8vb") <= len(seen) / 2:
+    # forced: the image shows the «8» under the clef that the engines missed («Tengo un amigo»)
+    if not forced and (not seen or seen.count("G8vb") <= len(seen) / 2):
         return
     from music21 import pitch as m21pitch
 
@@ -286,6 +385,16 @@ def _octave_treble_clef(cands: list[Candidate], clef_engines: set) -> None:
 
 
 # --------------------------------------------------------------------------- validation
+
+
+def _write_xml(score, path: Path) -> None:
+    """music21 re-makes the notation when writing and sometimes trips on what it made itself
+    (MeterException «cannot access qLenPos», a measure «already found in this Stream»): the score is
+    complete, so it is written as it is rather than lose the hymn («Si a Cristo buscas»)."""
+    try:
+        score.write("musicxml", fp=str(path))
+    except Exception:  # noqa: BLE001
+        score.write("musicxml", fp=str(path), makeNotation=False)
 
 
 def final_file(run_dir: Path) -> Path | None:
@@ -534,10 +643,10 @@ def validate_run(run_dir: Path, cfg: dict) -> dict:
     if title_file.exists() and title_file.read_text(encoding="utf-8").strip():
         voted.title = joined.title = final.title = title_file.read_text(encoding="utf-8").strip()
     voices_xml = run_dir / f"{_safe_name(voted.title or run_dir.name.rsplit('_', 2)[0])}.musicxml"
-    to_music21(final, cfg).write("musicxml", fp=str(voices_xml))
+    _write_xml(to_music21(final, cfg), voices_xml)
     # the same music as printed: 2 staves, verses stacked, repeats and signs kept
     digital_xml = voices_xml.with_name(f"{voices_xml.stem} (copia digital).musicxml")
-    to_two_staves(joined, cfg).write("musicxml", fp=str(digital_xml))
+    _write_xml(to_two_staves(joined, cfg), digital_xml)
     (run_dir / "votacion.json").write_text(json.dumps(details, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # The notehead check alone seldom tells a right measure from a wrong one: in the 9 hand-made

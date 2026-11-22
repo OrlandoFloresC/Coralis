@@ -37,23 +37,44 @@ class AudiverisEngine(Engine):
         cmd = [str(exe), "-batch", "-export", "-output", str(out_dir)]
         if langs:
             cmd += ["-constant", f"org.audiveris.omr.text.Language.defaultSpecification={langs}"]
-        cmd += ["--", str(book)]
         result = EngineResult(engine=self.name, image=book, log=log)
         timeout = self.cfg["tools"]["engine_timeout"] * len(pages)
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                  timeout=timeout, env=_quiet_env())
+
+        def run(sheets: list[int] | None):
+            extra = ["-sheets", *map(str, sheets)] if sheets else []
+            proc = subprocess.run(cmd + extra + ["--", str(book)], capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=timeout, env=_quiet_env())
             log.write_text(proc.stdout + "\n" + proc.stderr, encoding="utf-8")
+            return proc
+
+        def exported():
+            # A book can yield several movements: book.mxl or book.mvt1.mxl, book.mvt2.mxl...
+            return sorted(out_dir.glob("book*.mxl")) + sorted(out_dir.glob("book*.xml"))
+
+        try:
+            proc = run(None)
+            removed = _removed_sheets(log.read_text(encoding="utf-8"))
+            if not exported() and removed and len(removed) < len(pages):
+                # a page with no music (a cover with the next page showing through: «A la nanita
+                # nana») is removed and then the whole book fails to export: only the other pages
+                # (they keep their page numbers)
+                proc = run([n for n in range(1, len(pages) + 1) if n not in removed])
         except subprocess.TimeoutExpired:
             result.error = "tiempo agotado"
             return result
-        # A book can yield several movements: book.mxl or book.mvt1.mxl, book.mvt2.mxl...
-        result.musicxml = sorted(out_dir.glob("book*.mxl")) + sorted(out_dir.glob("book*.xml"))
+        result.musicxml = exported()
         result.warnings = [l.strip() for l in log.read_text(encoding="utf-8").splitlines() if " WARN " in l]
         result.ok = bool(result.musicxml)
         if not result.ok:
             result.error = f"Audiveris no exportó MusicXML (código {proc.returncode}); ver {log.name}"
         return result
+
+
+def _removed_sheets(log: str) -> set[int]:
+    """Sheets Audiveris dropped as invalid («[book#1] ... Sheet removed»)."""
+    import re
+
+    return {int(n) for n in re.findall(r"\[book#(\d+)\][^\n]*Sheet removed", log)}
 
 
 def _quiet_env() -> dict:

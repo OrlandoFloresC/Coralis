@@ -56,7 +56,7 @@ def merge_pages(files: list[Path], out: Path) -> tuple[Path, list[str]]:
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
         merged.write("musicxml", fp=str(out))
-    except (KeyError, IndexError, AttributeError) as e:
+    except Exception as e:  # noqa: BLE001  (KeyError, StreamException «already found in this Stream»…)
         # music21 re-makes the notation on writing and breaks on some engine output (a note of
         # voice 7 running past the bar into a measure without voice 7: KeyError '7'). The pages
         # are already notated: write them as they are.

@@ -64,6 +64,8 @@ class Event:
     lyrics: dict[int, tuple[str, str]] = field(default_factory=dict)  # verse -> (text, syllabic)
     filled: bool = False           # rest inserted by the pipeline to cover a gap
     slur_cont: bool = False        # sung on the previous syllable (inside a slur, after its first note)
+    printed: bool = False          # this reading saw the accidental sign drawn (♯ ♭ ♮)
+    shown: bool = False            # the vote: two readings or more saw that sign: it is printed
 
     @property
     def takes_syllable(self) -> bool:
@@ -381,7 +383,8 @@ def _pick(raw: RawEvent, which: str) -> Event:
     i = -1 if which == "top" else 0
     p = raw.pitches[i]
     return Event(raw.offset, raw.duration, p.nameWithOctave, int(p.midi), p.step,
-                 float(p.accidental.alter) if p.accidental else 0.0, raw.ties[i], slur_cont=raw.slur_cont)
+                 float(p.accidental.alter) if p.accidental else 0.0, raw.ties[i], slur_cont=raw.slur_cont,
+                 printed=bool(p.accidental is not None and p.accidental.displayStatus))
 
 
 def _mark_slurs(score: stream.Score, per_part: list[list["Staff"]]) -> None:
@@ -445,7 +448,12 @@ def _voice_from(primary, fallbacks, which: str, length: Fraction, rests_first: b
                     tiles = False
                     break
                 t = x.offset + x.duration
-            if not (tiles and t == a1):
+            # far from this voice's own notes around the rest (more than an octave): the other
+            # voice's line, not this one («Hombre fiel» c.37: the baritone rests over the bass's sol2)
+            own = [x for x in primary if x.pitches]
+            near = [x for x in own if x.offset + x.duration <= a0][-1:] + [x for x in own if x.offset >= a1][:1]
+            far = near and any(abs(x.pitches[-1].ps - n.pitches[-1].ps) > 12 for x in over for n in near)
+            if not (tiles and t == a1) or far:
                 keep.append((a0, a1))
         return keep
 
@@ -520,6 +528,14 @@ def _order_layers(layers: list[list[RawEvent]]) -> list[list[RawEvent]]:
         if no_stems and all(i.isdigit() for i in ids) and ids[0] != ids[1]:
             order = sorted(layers, key=lambda l: int(l[0].layer))
     if order is None or _crossing(order[0], order[1]) > 7:
+        return by_pitch
+    # the same rhythm in both, the «upper» one below at every note: a chord on one stem the engine
+    # split in two with made-up stem directions («Contigo quiero andar» c.0-1: sol and do on one stem
+    # up; the soprano came out on sol) — the pitch decides
+    rhythm = lambda l: [(e.offset, e.duration) for e in l if e.pitches]
+    if rhythm(order[0]) == rhythm(order[1]) and rhythm(order[0]) and all(
+            a.pitches[-1].ps < b.pitches[-1].ps
+            for a, b in zip([e for e in order[0] if e.pitches], [e for e in order[1] if e.pitches])):
         return by_pitch
     return order
 
@@ -684,10 +700,19 @@ def build_choral_score(xml_path: Path, layout: list[LayoutSystem] | None = None,
     # 3. the staves with content in each system (top to bottom)
     systems = []
     for si, (a, b) in enumerate(bounds):
+        # an open score (four parts, a staff per voice) keeps its four staves even when some are
+        # silent for a whole system: a staff is a voice by its place («Abraza hoy la cruz»: the bass
+        # sings alone, the baritone enters in c.5 — they became S/A and T/B of a 2-staff system)
+        # (four parts going down in clef, G G F F: not G F G F — Audiveris made new parts when the staff
+        # names change after the first system: «A Cristo coronad 2», two pairs of staves)
+        ranks = [CLEF_RANK.get(next((per_part[pi][j].clef for j in range(len(per_part[pi]))
+                                     if per_part[pi][j].has_notes), per_part[pi][0].clef if per_part[pi] else "G"), 0)
+                 for pi in range(len(parts))]
+        open_score = len(parts) == 4 and all(x <= y for x, y in zip(ranks, ranks[1:]))
         staff_rows = [
             [per_part[pi][j] for j in range(a, b)]
             for pi in range(len(parts))
-            if any(per_part[pi][j].has_notes for j in range(a, b))
+            if open_score or any(per_part[pi][j].has_notes for j in range(a, b))
         ]
         systems.append({"rows": staff_rows, "layout": [layout[si]] if layout else [], "count": b - a})
 
@@ -1034,6 +1059,15 @@ def _time_from_content(measures: list[Measure], issues: list[Issue]) -> None:
             m.voices[v] = [e for e in evs if e.offset < length]
 
 
+def _looks_like_words(text: str) -> bool:
+    """OCR of a handwritten title gives scraps («Ni», «l o», «v ¡515»): a title has a word of at
+    least 3 letters and is mostly letters. Without one the file name is the title."""
+    chars = [c for c in text if not c.isspace()]
+    letters = sum(c.isalpha() for c in chars)
+    return (bool(chars) and letters >= 0.6 * len(chars)
+            and any(sum(c.isalpha() for c in w) >= 3 for w in text.split()))
+
+
 def _biggest_credit(score) -> str | None:
     """The title is the biggest text on the first page. Engines sometimes call a publisher
     line the title ("Maranatha Music — The Praise Series" over "Oh, Dios y Padre")."""
@@ -1041,7 +1075,7 @@ def _biggest_credit(score) -> str | None:
 
     boxes = [t for t in score.getElementsByClass(m21text.TextBox)
              if (t.page or 1) == 1 and t.content and t.content.strip() and t.style.fontSize
-             and any(c.isalpha() for c in t.content)]
+             and _looks_like_words(t.content)]
     if not boxes:
         return None
     best = max(boxes, key=lambda t: float(t.style.fontSize))

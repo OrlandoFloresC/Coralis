@@ -65,6 +65,8 @@ def check(score: ChoralScore, cfg: dict) -> list[Issue]:
             for e in m.voices.get(v, []):
                 if not e.step or e.alter == in_key.get(e.step, 0.0) or not e.is_attack:
                     continue
+                if e.shown:
+                    continue   # the sign is printed: an engine saw it («Pensando siempre en ti» c.5: la♮)
                 # Spelled as a chromatic note but equal to a note of the key (fa♭ = mi in F major):
                 # a composer would write the diatonic note, so this is almost surely a misread.
                 diatonic_twin = _diatonic_enharmonic(e.midi, in_key)

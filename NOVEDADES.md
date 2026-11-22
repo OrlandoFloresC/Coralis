@@ -6,6 +6,23 @@ Lo nuevo de cada versión. La guía completa de uso está en [GUIA.md](https://g
 > dudosos para que los revises. Compara siempre el resultado con la partitura impresa: la decisión final la
 > tienes tú.
 
+## 0.12.0 — noviembre de 2026
+
+Mejoras tras revisar más partituras contra la imagen:
+
+- **Títulos:** si el título de la partitura está escrito a mano y no se puede leer, Coralis usa el nombre del archivo
+  (antes salían títulos como «Ni»).
+- **Portadas:** una página sin música al principio (una portada con la partitura de atrás transparentándose) ya no
+  hace fallar la lectura ni agrega compases vacíos que no existen.
+- **Compases:** se quitan los compases que uno de los lectores escribía dos veces, y un cambio de compás (2/4 → 3/4)
+  que los lectores vieron tarde se corrige si todas las voces lo llenan.
+- **Anacrusa:** se reconoce mejor y se mide con lo que de verdad cantan las voces.
+- **Notas:** cuando casi todas las lecturas están de acuerdo en una voz, la comparación con la imagen ya no la cambia;
+  y si cambia una voz que cantaba al unísono con la otra del mismo pentagrama, cambian las dos.
+- **Estrofas:** en partituras de 4 pentagramas, la letra repetida bajo otro pentagrama ya no se cuenta como estrofas de
+  más (antes podía repetir la música de más).
+- **Menos compases dudosos sin motivo:** un cambio de armadura impreso que las notas confirman ya no se marca.
+
 ## 0.11.0 — noviembre de 2026
 
 - **Coralis lee la letra por su cuenta** (en Mac, con el lector de texto del sistema) y la compara con la de
